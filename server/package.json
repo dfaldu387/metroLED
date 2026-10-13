@@ -1,0 +1,44 @@
+{
+  "name": "@metroled/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MetroLED Intelligence API - Express + PostgreSQL (node-postgres).",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts scripts/worker.ts scripts/run-sync.ts scripts/send-daily-brief.ts db/migrate.ts db/seed.ts --bundle --platform=node --format=esm --target=node20 --packages=external --sourcemap --outdir=dist --outbase=.",
+    "start": "node --enable-source-maps dist/src/index.js",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "tsx db/migrate.ts",
+    "db:status": "tsx db/migrate.ts --status",
+    "db:seed": "tsx db/seed.ts",
+    "worker": "tsx scripts/worker.ts",
+    "sync": "tsx scripts/run-sync.ts",
+    "brief": "tsx scripts/send-daily-brief.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.15.5",
+    "esbuild": "^0.25.10",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
