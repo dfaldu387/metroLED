@@ -76,10 +76,20 @@ not what it is.
 
 ### QuickBooks Online
 
-Needs `QBO_CLIENT_ID` and `QBO_CLIENT_SECRET`, with the redirect URI registered
-as `<APP_URL>/api/integrations/quickbooks/callback`.
+QuickBooks connects through Intuit's sign-in, and Intuit only shows that
+sign-in to a registered app. So there are two steps, both from **Data Health →
+Sign in with QuickBooks** (or the same button under Settings → Integrations):
 
-Press **Connect QuickBooks Online** and complete the Intuit consent. The access
+1. **Intuit app keys.** Create an app at developer.intuit.com with the
+   Accounting scope, register the redirect URI the dialog shows
+   (`<APP_URL>/api/integrations/quickbooks/callback`) and paste the app's
+   Client ID and Client Secret into the dialog, choosing Sandbox or Production.
+   They are stored encrypted. `QBO_CLIENT_ID` / `QBO_CLIENT_SECRET` /
+   `QBO_ENVIRONMENT` in the server environment still work as a fallback; keys
+   saved from the dialog take precedence.
+2. **Sign in with Intuit.** Approve read access for the MetroLED company. The
+   tokens are stored encrypted and the connection is tested before it is
+   marked connected. The access
 token refreshes automatically; the refresh token is rotated and stored
 encrypted.
 
@@ -88,14 +98,27 @@ encrypted.
 
 ### Method CRM and Shopify
 
-Both use a key or token set in the environment. After setting them, use **Test
-a connection** on Data Health to confirm before running a sync.
+Both are connected from **Data Health**: an owner (anyone with
+`settings.manage`) presses **Connect** on the source's row and pastes the key
+or token. It is stored encrypted, tested once against the provider, and only
+then marked as connected. If the test fails nothing changes and the row says
+why. **Disconnect** removes the stored credential and stops the scheduled sync;
+imported history is kept.
+
+- **Method CRM** needs an API key with read access (Method → Integrations → API).
+- **Shopify** needs the store's `*.myshopify.com` domain and a custom app's
+  Admin API access token with `read_orders` and `read_customers`. The webhook
+  signing secret is optional.
+
+A key set in the server environment (`METHOD_API_KEY`, `SHOPIFY_SHOP_DOMAIN`,
+`SHOPIFY_ADMIN_ACCESS_TOKEN`) still works as a fallback, but a credential saved
+from Data Health takes precedence and survives a redeploy.
 
 For Shopify, also configure the webhook endpoint `<APP_URL>/api/webhooks/shopify`
 on the topics `orders/create`, `orders/updated`, `orders/cancelled`,
-`orders/paid` and `refunds/create`, and set `SHOPIFY_WEBHOOK_SECRET` to the
-app's signing secret. Webhooks give near-real-time order updates; without them
-orders still arrive on the scheduled sync.
+`orders/paid` and `refunds/create`, and enter the app's signing secret in the
+connect dialog (or set `SHOPIFY_WEBHOOK_SECRET`). Webhooks give near-real-time
+order updates; without them orders still arrive on the scheduled sync.
 
 ### Importing history
 

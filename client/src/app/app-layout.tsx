@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { MobileNav, Sidebar } from '@/components/layout/sidebar'
 import { PwaProvider } from '@/components/layout/pwa'
+import { TopBar } from '@/components/layout/top-bar'
 import { useSessionInfo } from '@/lib/session'
 
 /**
@@ -25,18 +26,21 @@ export function AppLayout() {
   // A user with no usable page at all should be told so, not shown an empty shell.
   if (user.landingPage === '/no-access') return <Navigate to="/no-access" replace />
 
-  const sidebarUser = { name: user.name, email: user.email, roleLabel: user.roleLabel, isDemo: user.isDemo }
+  const sidebarUser = { id: user.id, name: user.name, email: user.email, roleLabel: user.roleLabel, isDemo: user.isDemo }
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <MobileNav user={sidebarUser} allowedHrefs={user.allowedHrefs} />
       <Sidebar user={sidebarUser} allowedHrefs={user.allowedHrefs} />
 
-      <main id="main-content" className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-          <Outlet />
-        </div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar user={sidebarUser} />
+        <main id="main-content" className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
 
       <PwaProvider />
     </div>

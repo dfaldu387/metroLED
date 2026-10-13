@@ -176,6 +176,8 @@ export interface MetricsSettingsPageData {
     isApproved: boolean
     approvedBy: string | null
     basis: string
+    /** Set by the sync when a figure changed after it was approved. */
+    note: string | null
   }[]
   reconciliations: {
     id: string

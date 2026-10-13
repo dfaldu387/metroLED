@@ -45,7 +45,7 @@ function AccountsReceivable({ data }: { data: AccountsReceivablePageData }) {
 
       <PageHeader
         title="Accounts Receivable"
-        description="What customers owe right now, how overdue it is, and which invoices to look at first."
+        description="What customers owe, how overdue it is, and which invoices to chase first."
         meta={
           <>
             <MetaFact label="Balances as at" value="now" />

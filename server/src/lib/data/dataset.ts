@@ -71,9 +71,13 @@ export async function loadDataset(scope: AccessScope, options: LoadOptions = {})
   const rangeStart = startOfMonth(addMonths(today, -(months - 1)))
 
   if (await databaseReachable()) {
-    const live = await loadLiveDataset(scope, rangeStart, now, options.divisionId ?? null)
-    // An empty database is not an error, but it is also not "live figures".
-    const hasRecords = live.invoices.length > 0 || live.quotes.length > 0 || live.orders.length > 0
+    const [live, hasRecords] = await Promise.all([
+      loadLiveDataset(scope, rangeStart, now, options.divisionId ?? null),
+      // Decided on the whole database, not on the selected window: a connected
+      // deployment whose records all fall outside a 30-day range is still
+      // "live" (with zero figures for that range), not "unavailable".
+      hasImportedRecords(),
+    ])
     if (hasRecords) return live
 
     if (demoDataAllowed()) {
@@ -94,6 +98,15 @@ export async function loadDataset(scope: AccessScope, options: LoadOptions = {})
 // ---------------------------------------------------------------------------
 // Live loading
 // ---------------------------------------------------------------------------
+
+/** Whether any sync has ever written a business record, regardless of date or scope. */
+async function hasImportedRecords(): Promise<boolean> {
+  const row = await db.one<{ any: boolean }>(sql`
+    SELECT EXISTS (SELECT 1 FROM "Invoice")
+        OR EXISTS (SELECT 1 FROM "Quote")
+        OR EXISTS (SELECT 1 FROM "ShopifyOrder") AS "any"`)
+  return row.any
+}
 
 async function loadLiveDataset(
   scope: AccessScope,

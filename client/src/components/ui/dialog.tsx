@@ -37,7 +37,7 @@ export const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-ink-200 bg-white shadow-overlay',
+          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-overlay',
           className,
         )}
         {...props}
@@ -67,7 +67,7 @@ export const DrawerContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden border-l border-ink-200 bg-white shadow-overlay',
+          'fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden border-l border-ink-200 bg-surface shadow-overlay',
           className,
         )}
         {...props}
@@ -165,7 +165,7 @@ export function ConfirmDialog({
     <AlertDialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialogPrimitive.Portal>
         <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink-950/40 backdrop-blur-[1px]" />
-        <AlertDialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-ink-200 bg-white p-5 shadow-overlay">
+        <AlertDialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-ink-200 bg-surface p-5 shadow-overlay">
           <AlertDialogPrimitive.Title className="text-[15px] font-semibold text-ink-900">
             {title}
           </AlertDialogPrimitive.Title>

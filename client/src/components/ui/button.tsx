@@ -19,7 +19,7 @@ const buttonVariants = cva(
       variant: {
         primary: 'bg-brand-600 text-white shadow-raised hover:bg-brand-700 active:bg-brand-800',
         secondary:
-          'border border-ink-300 bg-white text-ink-800 shadow-card hover:bg-ink-50 active:bg-ink-100',
+          'border border-ink-300 bg-surface text-ink-800 shadow-card hover:bg-ink-50 active:bg-ink-100',
         ghost: 'text-ink-700 hover:bg-ink-100 hover:text-ink-900',
         danger: 'bg-negative-600 text-white shadow-raised hover:bg-negative-700 active:bg-negative-800',
         link: 'text-brand-600 underline-offset-4 hover:underline',

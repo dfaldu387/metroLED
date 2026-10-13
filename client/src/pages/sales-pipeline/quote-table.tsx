@@ -123,7 +123,7 @@ export function QuoteTable({
               }}
               placeholder="Search quote, customer, stage"
               aria-label="Search open quotes"
-              className="h-9 w-full rounded-lg border border-ink-300 bg-white pl-8 pr-3 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-400 hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 sm:w-72"
+              className="h-9 w-full rounded-lg border border-ink-300 bg-surface pl-8 pr-3 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-400 hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 sm:w-72"
             />
           </div>
 

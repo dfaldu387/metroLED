@@ -9,6 +9,8 @@ import { BRAND_ICON, NAV_ICONS } from './nav-icons'
 import { Avatar, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/misc'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { NotificationsMenu } from './notifications'
+import { ThemeToggle } from './top-bar'
 
 /**
  * Navigation shell.
@@ -23,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  */
 
 export interface SidebarUser {
+  id: string
   name: string
   email: string
   roleLabel: string
@@ -193,7 +196,7 @@ export function Sidebar({ user, allowedHrefs }: SidebarProps) {
       list inside scrolls on its own if it ever outgrows the viewport, which
       keeps the brand pinned at the top and the account menu at the bottom.
     */
-    <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:shrink-0 lg:flex-col lg:self-start lg:border-r lg:border-ink-200 lg:bg-white">
+    <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:shrink-0 lg:flex-col lg:self-start lg:border-r lg:border-ink-200 lg:bg-surface">
       <div className="px-4 py-4">
         <Brand />
       </div>
@@ -271,8 +274,11 @@ export function MobileNav({ user, allowedHrefs }: SidebarProps) {
 
   return (
     <>
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-white px-3 lg:hidden print-hidden">
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-surface px-3 lg:hidden print-hidden">
         <Brand />
+        <div className="flex items-center gap-0.5">
+          <ThemeToggle />
+          <NotificationsMenu userId={user.id} />
         <button
           ref={triggerRef}
           type="button"
@@ -284,6 +290,7 @@ export function MobileNav({ user, allowedHrefs }: SidebarProps) {
         >
           <Menu className="size-5" aria-hidden />
         </button>
+        </div>
       </div>
 
       {open ? (
@@ -297,7 +304,7 @@ export function MobileNav({ user, allowedHrefs }: SidebarProps) {
           <div className="absolute inset-0 bg-ink-950/40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             id="mobile-navigation-drawer"
-            className="absolute inset-y-0 left-0 flex w-[min(19rem,88vw)] flex-col border-r border-ink-200 bg-white shadow-overlay"
+            className="absolute inset-y-0 left-0 flex w-[min(19rem,88vw)] flex-col border-r border-ink-200 bg-surface shadow-overlay"
           >
             <div className="flex items-center justify-between px-4 py-4">
               <Brand />

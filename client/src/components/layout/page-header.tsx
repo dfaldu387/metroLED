@@ -19,7 +19,7 @@ export function PageHeader({
   className,
 }: {
   title: string
-  description: string
+  description?: string
   primaryAction?: React.ReactNode
   secondaryActions?: React.ReactNode
   /** Small facts shown under the description, e.g. last refresh time. */
@@ -33,7 +33,9 @@ export function PageHeader({
           <h1 className="text-[21px] font-semibold leading-tight tracking-[-0.015em] text-ink-900 sm:text-[23px]">
             {title}
           </h1>
-          <p className="mt-1.5 max-w-2xl text-[13.5px] leading-5 text-ink-600">{description}</p>
+          {description ? (
+            <p className="mt-1.5 max-w-2xl text-[13.5px] leading-5 text-ink-600">{description}</p>
+          ) : null}
           {meta ? <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">{meta}</div> : null}
         </div>
         {primaryAction || secondaryActions ? (

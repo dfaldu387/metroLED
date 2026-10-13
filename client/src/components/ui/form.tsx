@@ -34,7 +34,7 @@ export const Label = React.forwardRef<
 })
 
 export const inputClasses =
-  'block w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-400 hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-ink-100 disabled:text-ink-500 aria-[invalid=true]:border-negative-500 aria-[invalid=true]:ring-negative-500/20'
+  'block w-full rounded-lg border border-ink-300 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-400 hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-ink-100 disabled:text-ink-500 aria-[invalid=true]:border-negative-500 aria-[invalid=true]:ring-negative-500/20'
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
@@ -106,7 +106,7 @@ export const SelectTrigger = React.forwardRef<
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-ink-300 bg-white px-3 text-sm text-ink-900 shadow-card transition-colors hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-ink-100 [&>span]:truncate',
+        'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-ink-300 bg-surface px-3 text-sm text-ink-900 shadow-card transition-colors hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-ink-100 [&>span]:truncate',
         className,
       )}
       {...props}
@@ -131,7 +131,7 @@ export const SelectContent = React.forwardRef<
         sideOffset={4}
         collisionPadding={8}
         className={cn(
-          'relative z-50 max-h-72 min-w-[10rem] overflow-y-auto rounded-lg border border-ink-200 bg-white p-1 shadow-overlay',
+          'relative z-50 max-h-72 min-w-[10rem] overflow-y-auto rounded-lg border border-ink-200 bg-surface p-1 shadow-overlay',
           position === 'popper' && 'w-[var(--radix-select-trigger-width)]',
           className,
         )}

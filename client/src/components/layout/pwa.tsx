@@ -88,7 +88,7 @@ export function PwaProvider() {
       ) : null}
 
       {installEvent ? (
-        <div className="fixed bottom-4 right-4 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-ink-200 bg-white p-4 shadow-overlay print-hidden">
+        <div className="fixed bottom-4 right-4 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-ink-200 bg-surface p-4 shadow-overlay print-hidden">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[13.5px] font-semibold text-ink-900">Add MetroLED to your home screen</p>

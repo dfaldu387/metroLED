@@ -21,6 +21,7 @@ import { db, sql, databaseReachable } from '../../lib/db'
 import type { IntegrationRow, SessionRow } from '../../lib/db-rows'
 import { demoDataAllowed, integrationEnv } from '../../lib/env'
 import { providerConfigured } from '../../lib/integrations/sync-service'
+import { quickBooksApp, quickBooksRedirectUri } from '../../lib/integrations/quickbooks-app'
 import { credentialEncryptionConfigured } from '../../lib/crypto'
 import { DEMO_UNMATCHED_RECORDS } from '../../lib/demo/dataset'
 import { handler } from '../../lib/http/errors'
@@ -34,6 +35,38 @@ import { handler } from '../../lib/http/errors'
 export const operationsPagesRouter = Router()
 
 const iso = (date: Date | null | undefined): string | null => (date ? date.toISOString() : null)
+
+/**
+ * A short, non-secret description of what a source is connected to, taken
+ * from the integration's `config` column (never from `credentials`).
+ */
+function connectionDetail(
+  provider: DataHealthSourceRow['provider'],
+  config: unknown,
+  source: DataHealthSourceRow['credentialSource'],
+): string | null {
+  const cfg = (config && typeof config === 'object' ? config : {}) as Record<string, unknown>
+  switch (provider) {
+    case 'QUICKBOOKS':
+      return typeof cfg.realmId === 'string'
+        ? `Company realm ${cfg.realmId}${cfg.environment === 'sandbox' ? ' (sandbox)' : ''}`
+        : null
+    case 'SHOPIFY': {
+      const domain =
+        typeof cfg.shopDomain === 'string'
+          ? cfg.shopDomain
+          : source === 'environment'
+            ? (integrationEnv.shopify().shopDomain ?? null)
+            : null
+      if (!domain) return null
+      return cfg.webhookSecretStored === false ? `${domain} · no webhook secret` : domain
+    }
+    case 'METHOD_CRM':
+      return source === 'none' ? null : source === 'environment' ? 'API key from environment' : 'API key stored'
+    default:
+      return null
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Ask MetroLED (section 11)
@@ -152,6 +185,7 @@ operationsPagesRouter.get(
     const params = req.query as SearchParams
     const user = await requirePermission(PERMISSIONS.DATA_HEALTH_VIEW, '/data-health')
     const canManage = user.permissions.has(PERMISSIONS.DATA_HEALTH_MANAGE)
+    const canConnect = user.permissions.has(PERMISSIONS.SETTINGS_MANAGE)
     const dbReady = await databaseReachable()
     const now = new Date()
 
@@ -233,13 +267,15 @@ operationsPagesRouter.get(
     // so the page can be reviewed, clearly labelled.
     const usingDemo = !dbReady && demoDataAllowed()
 
+    const qboApp = await quickBooksApp()
+
     const providers: {
       provider: 'QUICKBOOKS' | 'METHOD_CRM' | 'SHOPIFY' | 'MONDAY'
       displayName: string
       required: boolean
       envConfigured: boolean
     }[] = [
-      { provider: 'QUICKBOOKS', displayName: 'QuickBooks Online', required: true, envConfigured: integrationEnv.quickbooks().configured },
+      { provider: 'QUICKBOOKS', displayName: 'QuickBooks Online', required: true, envConfigured: qboApp.configured },
       { provider: 'METHOD_CRM', displayName: 'Method CRM', required: true, envConfigured: integrationEnv.method().configured },
       { provider: 'SHOPIFY', displayName: 'Shopify — Eco LED Mart', required: true, envConfigured: integrationEnv.shopify().configured },
       ...(integrationEnv.monday().enabled
@@ -258,8 +294,26 @@ operationsPagesRouter.get(
       const row = integrations.find((i) => i.provider === definition.provider)
       const mins = minutesSince(row?.lastSuccessAt ?? null, now)
       const staleHours = 6
+      const stored = Boolean(row?.credentials)
+      const oauth = definition.provider === 'QUICKBOOKS'
+      // QuickBooks only ever works from stored OAuth tokens; its env vars are the
+      // app's own client id/secret, not a connection. Key-based sources accept
+      // either a stored key or one from the environment.
+      const configuredNow = oauth ? stored : stored || providerConfigured(definition.provider)
+      const credentialSource: DataHealthSourceRow['credentialSource'] = stored
+        ? 'stored'
+        : !oauth && providerConfigured(definition.provider)
+          ? 'environment'
+          : 'none'
       return {
         ...definition,
+        credentialSource,
+        connectionDetail: connectionDetail(definition.provider, row?.config, credentialSource),
+        connectMethod: oauth ? 'oauth' : definition.provider === 'MONDAY' ? 'none' : 'form',
+        oauthAppConfigured: oauth ? qboApp.configured : true,
+        oauthAppSource: oauth ? qboApp.source : 'none',
+        oauthEnvironment: oauth ? qboApp.environment : null,
+        oauthRedirectUri: oauth ? quickBooksRedirectUri() : null,
         status: row?.status ?? 'NOT_CONFIGURED',
         isEnabled: row?.isEnabled ?? false,
         lastSuccessAt: iso(row?.lastSuccessAt),
@@ -272,7 +326,7 @@ operationsPagesRouter.get(
         hasStoredCredentials: Boolean(row?.credentials),
         isStale: (row?.isEnabled ?? false) && (mins === null || mins > staleHours * 60),
         minutesSinceSuccess: mins,
-        configuredNow: providerConfigured(definition.provider),
+        configuredNow,
       }
     })
 
@@ -290,6 +344,7 @@ operationsPagesRouter.get(
       dbReady,
       usingDemo,
       canManage,
+      canConnect,
       credentialEncryptionConfigured: credentialEncryptionConfigured(),
       rows,
       lastRefreshAt: iso(lastRefresh),

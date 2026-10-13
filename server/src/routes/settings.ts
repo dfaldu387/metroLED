@@ -17,6 +17,7 @@ import { handler } from '../lib/http/errors'
 import { loadSettings } from '../lib/data/dataset'
 import { emailConfigured, emailProviderLabel } from '../lib/email/provider'
 import { env, integrationEnv } from '../lib/env'
+import { quickBooksApp, quickBooksRedirectUri } from '../lib/integrations/quickbooks-app'
 import { credentialEncryptionConfigured } from '../lib/crypto'
 import { MAPPABLE_FIELDS } from '../lib/integrations/division-mapping'
 import { PERMISSIONS } from '@shared/permissions'
@@ -285,13 +286,14 @@ settingsRouter.get(
             isApproved: boolean
             approvedBy: string | null
             basis: string
+            note: string | null
           }>(sql`
             SELECT c."id", d."name" AS "divisionName", d."code" AS "divisionCode", c."periodStart",
-                   c."cogsAmount", c."isApproved", c."approvedBy", c."basis"
+                   c."cogsAmount", c."isApproved", c."approvedBy", c."basis", c."note"
             FROM "DivisionCost" c
             JOIN "Division" d ON d."id" = c."divisionId"
-            ORDER BY c."periodStart" DESC
-            LIMIT 24`),
+            ORDER BY c."periodStart" DESC, d."sortOrder" ASC
+            LIMIT 120`),
           db.many<{
             id: string
             metricName: string
@@ -355,6 +357,7 @@ settingsRouter.get(
         isApproved: period.isApproved,
         approvedBy: period.approvedBy,
         basis: period.basis,
+        note: period.note,
       })),
       reconciliations: reconciliations.map((rec) => ({
         id: rec.id,
@@ -399,7 +402,7 @@ settingsRouter.get(
           ORDER BY "provider" ASC`)
       : []
 
-    const qbo = integrationEnv.quickbooks()
+    const qbo = await quickBooksApp()
     const method = integrationEnv.method()
     const shopify = integrationEnv.shopify()
     const monday = integrationEnv.monday()
@@ -414,7 +417,7 @@ settingsRouter.get(
         envReady: qbo.configured,
         docsUrl: 'https://developer.intuit.com',
         connectUrl: '/api/integrations/quickbooks/connect' as string | null,
-        extra: `Environment: ${env().QBO_ENVIRONMENT}. Redirect URI must be ${env().APP_URL}/api/integrations/quickbooks/callback`,
+        extra: `Environment: ${qbo.environment}. App keys: ${qbo.source === 'stored' ? 'saved from the app' : qbo.source === 'environment' ? 'from the server environment' : 'not set'}. Redirect URI registered with Intuit must be ${quickBooksRedirectUri()}`,
       },
       {
         provider: 'METHOD_CRM' as const,
@@ -803,6 +806,132 @@ settingsRouter.delete(
 // ===========================================================================
 // Cost mappings and metric approvals
 // ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Monthly cost approvals
+// ---------------------------------------------------------------------------
+
+async function requireCostApprover(): Promise<
+  { ok: true; user: SessionUser } | { ok: false; result: SettingsResult }
+> {
+  const user = await getSession()
+  if (!user) return { ok: false, result: { ok: false, message: 'Your session has expired. Sign in and try again.' } }
+  if (!user.permissions.has(PERMISSIONS.METRICS_APPROVE)) {
+    return { ok: false, result: { ok: false, message: 'Your role does not include approving cost figures.' } }
+  }
+  if (user.isDemo) {
+    return { ok: false, result: { ok: false, message: 'A demo session cannot approve a cost figure.' } }
+  }
+  if (!(await databaseReachable())) {
+    return { ok: false, result: { ok: false, message: 'The database is unreachable, so the approval cannot be recorded.' } }
+  }
+  return { ok: true, user }
+}
+
+interface CostPeriodRow {
+  id: string
+  divisionName: string
+  periodStart: Date
+  cogsAmount: string
+  isApproved: boolean
+}
+
+function monthLabel(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date)
+}
+
+/**
+ * POST /api/settings/cost-periods/:periodId/approval { approve }
+ *
+ * Finance confirms one month's direct-cost figure for one division. Gross
+ * margin for a period is only reported once every month in it is approved.
+ */
+settingsRouter.post(
+  '/cost-periods/:periodId/approval',
+  handler(async (req): Promise<SettingsResult> => {
+    const auth = await requireCostApprover()
+    if (!auth.ok) return auth.result
+    const id = String(req.params.periodId ?? '')
+    const approve = isTrue(field(body(req), 'approve'))
+
+    const period = await db.maybeOne<CostPeriodRow>(sql`
+      SELECT c."id", d."name" AS "divisionName", c."periodStart", c."cogsAmount", c."isApproved"
+      FROM "DivisionCost" c JOIN "Division" d ON d."id" = c."divisionId"
+      WHERE c."id" = ${id}`)
+    if (!period) return { ok: false, message: 'That cost period no longer exists.' }
+
+    const now = new Date()
+    await db.exec(sql`
+      UPDATE "DivisionCost" SET
+        "isApproved" = ${approve},
+        "approvedBy" = ${approve ? auth.user.email : null},
+        "approvedAt" = ${approve ? now : null},
+        "note" = NULL,
+        "updatedAt" = ${now}
+      WHERE "id" = ${id}`)
+
+    const label = `${period.divisionName}, ${monthLabel(period.periodStart)}`
+    await recordAudit({
+      action: approve ? AUDIT_ACTIONS.COST_PERIOD_APPROVED : AUDIT_ACTIONS.COST_PERIOD_APPROVAL_WITHDRAWN,
+      summary: `${auth.user.name} ${approve ? 'approved' : 'withdrew approval of'} the cost of goods sold for ${label} (${toNumber(period.cogsAmount).toFixed(2)}).`,
+      actor: auth.user,
+      entityType: 'DivisionCost',
+      entityId: id,
+      metadata: { cogsAmount: toNumber(period.cogsAmount), periodStart: period.periodStart.toISOString() },
+    })
+
+    return {
+      ok: true,
+      message: approve ? `${label} approved.` : `Approval withdrawn for ${label}. Margin for that month is unavailable until it is approved again.`,
+    }
+  }),
+)
+
+/**
+ * POST /api/settings/cost-periods/approve-all
+ *
+ * Approves every month that is not yet approved, in one audited action. Used
+ * after an initial import, when the figures have been checked against the
+ * QuickBooks report as a whole.
+ */
+settingsRouter.post(
+  '/cost-periods/approve-all',
+  handler(async (): Promise<SettingsResult> => {
+    const auth = await requireCostApprover()
+    if (!auth.ok) return auth.result
+
+    const pending = await db.many<CostPeriodRow>(sql`
+      SELECT c."id", d."name" AS "divisionName", c."periodStart", c."cogsAmount", c."isApproved"
+      FROM "DivisionCost" c JOIN "Division" d ON d."id" = c."divisionId"
+      WHERE c."isApproved" = false
+      ORDER BY c."periodStart" ASC`)
+    if (pending.length === 0) return { ok: true, message: 'Every cost period is already approved.' }
+
+    const now = new Date()
+    const ids = pending.map((p) => p.id)
+    await db.exec(sql`
+      UPDATE "DivisionCost" SET
+        "isApproved" = true,
+        "approvedBy" = ${auth.user.email},
+        "approvedAt" = ${now},
+        "note" = NULL,
+        "updatedAt" = ${now}
+      WHERE "id" = ANY(${ids}::text[])`)
+
+    const first = pending[0]!
+    const last = pending[pending.length - 1]!
+    await recordAudit({
+      action: AUDIT_ACTIONS.COST_PERIOD_APPROVED,
+      summary: `${auth.user.name} approved the cost of goods sold for ${pending.length} division-months (${monthLabel(first.periodStart)} to ${monthLabel(last.periodStart)}).`,
+      actor: auth.user,
+      entityType: 'DivisionCost',
+      entityId: 'bulk',
+      metadata: { count: pending.length, periodIds: ids },
+    })
+
+    return { ok: true, message: `${pending.length} cost periods approved.` }
+  }),
+)
 
 /** PUT /api/settings/cogs-accounts/:mappingId */
 settingsRouter.put(

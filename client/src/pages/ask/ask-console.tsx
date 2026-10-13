@@ -1,16 +1,35 @@
 import * as React from 'react'
-import { ArrowUp, Database, FlaskConical, RotateCcw, ShieldAlert, Sparkles } from 'lucide-react'
+import {
+  Clock,
+  Database,
+  FlaskConical,
+  Mic,
+  MicOff,
+  Percent,
+  RotateCcw,
+  Search,
+  SendHorizontal,
+  ShieldAlert,
+  ShoppingCart,
+  Sparkles,
+  Target,
+  TrendingUp,
+  type LucideIcon,
+} from 'lucide-react'
 import { parseAnswer } from '@shared/ask'
 import { cn } from '@/lib/utils'
 import { api, ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Alert, LiveRegion } from '@/components/ui/feedback'
 import { Avatar } from '@/components/ui/misc'
 import { Badge } from '@/components/ui/badge'
 
 /**
- * The Ask MetroLED chat console.
+ * The Ask MetroLED console.
+ *
+ * Empty state: a centred prompt with four suggested questions, each tagged
+ * with the area it explores. Conversation: the exchange scrolls in the middle
+ * and the composer stays pinned to the bottom of the viewport.
  *
  * Answers are rendered with their four sections (Answer, Business context,
  * Source, Data freshness) and the structured source list returned by the
@@ -165,137 +184,304 @@ export function AskConsole({
   }, [initialQuestion, enabled, submit])
 
   React.useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    if (turns.length > 0) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [turns])
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault()
-      void submit(input)
-    }
+  const startOver = () => {
+    setTurns([])
+    setConversationId(null)
+    inputRef.current?.focus()
   }
 
+  const empty = turns.length === 0
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col">
       <LiveRegion message={announcement} />
 
-      {turns.length === 0 ? (
-        <Card>
-          <CardContent className="py-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <span className="mx-auto mb-3.5 flex size-11 items-center justify-center rounded-full bg-brand-50">
-                <Sparkles className="size-5 text-brand-600" aria-hidden />
-              </span>
-              <h2 className="text-[16px] font-semibold text-ink-900">What would you like to know, {userName}?</h2>
-              <p className="mx-auto mt-1.5 max-w-lg text-[13.5px] leading-5 text-ink-600">
-                Ask about revenue, receivables, the sales pipeline, the Shopify store or how fresh the data is.
-                Every answer cites its source.
-              </p>
+      {empty ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-10 sm:py-14">
+          <div className="w-full max-w-2xl text-center">
+            <span className="mx-auto mb-5 flex size-[52px] items-center justify-center rounded-2xl bg-brand-50 ring-1 ring-inset ring-brand-100">
+              <Sparkles className="size-6 text-brand-600" aria-hidden />
+            </span>
+            <h2 className="mx-auto max-w-xl text-[24px] font-semibold leading-[1.25] tracking-[-0.02em] text-ink-900 sm:text-[27px]">
+              What would you like to understand about MetroLED, {userName}?
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-[14px] leading-6 text-ink-500">
+              Ask a question in plain English. MetroLED Intelligence searches the approved sources available to you
+              and explains what it finds, naming the system behind every figure.
+            </p>
 
-              <div className="mt-5 grid gap-2 text-left sm:grid-cols-2">
-                {suggestions.map((question) => (
+            <div className="mt-8 grid gap-3 text-left sm:grid-cols-2">
+              {suggestions.slice(0, 4).map((question) => {
+                const topic = classify(question)
+                return (
                   <button
                     key={question}
                     type="button"
                     disabled={!enabled}
                     onClick={() => void submit(question)}
-                    className="rounded-lg border border-ink-200 bg-white px-3.5 py-2.5 text-left text-[13px] text-ink-800 shadow-card transition-colors hover:border-brand-300 hover:bg-brand-50/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="group flex items-start gap-3.5 rounded-xl border border-ink-200 bg-surface px-4 py-3.5 text-left shadow-card transition-all hover:-translate-y-px hover:border-brand-300 hover:shadow-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   >
-                    {question}
+                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 transition-colors group-hover:bg-brand-100">
+                      <topic.icon className="size-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                        {topic.label}
+                      </span>
+                      <span className="mt-0.5 block text-[14px] font-medium leading-5 text-ink-900">{question}</span>
+                    </span>
                   </button>
-                ))}
-              </div>
+                )
+              })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {turns.map((turn) =>
-            turn.role === 'user' ? (
-              <div key={turn.id} className="flex justify-end">
-                <div className="flex max-w-[min(42rem,90%)] items-start gap-2.5">
-                  <div className="rounded-xl rounded-tr-sm bg-brand-600 px-3.5 py-2.5 text-[13.5px] leading-5 text-white">
-                    {turn.content}
+        <div className="flex-1 overflow-y-auto px-1 pb-6 pt-2">
+          <div className="mx-auto w-full max-w-3xl space-y-5">
+            <div className="flex items-center justify-end">
+              <Button type="button" variant="ghost" size="sm" onClick={startOver}>
+                <RotateCcw aria-hidden />
+                Start over
+              </Button>
+            </div>
+            {turns.map((turn) =>
+              turn.role === 'user' ? (
+                <div key={turn.id} className="flex justify-end">
+                  <div className="flex max-w-[min(42rem,90%)] items-start gap-2.5">
+                    <div className="rounded-2xl rounded-tr-md bg-brand-600 px-4 py-2.5 text-[14px] leading-6 text-white">
+                      {turn.content}
+                    </div>
+                    <Avatar name={userName} size="sm" className="mt-0.5 bg-ink-200 text-ink-700" />
                   </div>
-                  <Avatar name={userName} size="sm" className="mt-0.5 bg-ink-200 text-ink-700" />
                 </div>
-              </div>
-            ) : (
-              <AssistantTurn key={turn.id} turn={turn} />
-            ),
-          )}
-          <div ref={endRef} />
+              ) : (
+                <AssistantTurn key={turn.id} turn={turn} />
+              ),
+            )}
+            <div ref={endRef} />
+          </div>
         </div>
       )}
 
-      {/* --- Composer ------------------------------------------------------ */}
-      <Card className="sticky bottom-4 z-10">
-        <CardContent className="py-3">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submit(input)
-            }}
-          >
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={onKeyDown}
-                rows={1}
-                disabled={!enabled || busy}
-                aria-label="Ask a question about company data"
-                placeholder={
-                  enabled ? 'Ask about revenue, overdue invoices, the pipeline…' : 'The assistant is not configured'
-                }
-                className="max-h-40 min-h-9 flex-1 resize-none rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-400 hover:border-ink-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-ink-100"
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                size="icon"
-                loading={busy}
-                disabled={!enabled || !input.trim()}
-                aria-label="Send question"
-              >
-                {busy ? null : <ArrowUp aria-hidden />}
-              </Button>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <p className="text-[11.5px] text-ink-500">
-                Press Enter to send, Shift+Enter for a new line. Answers come only from approved company data
-                queries.
-              </p>
-              {turns.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setTurns([])
-                    setConversationId(null)
-                    inputRef.current?.focus()
-                  }}
-                >
-                  <RotateCcw aria-hidden />
-                  Start over
-                </Button>
-              ) : null}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {dataMode === 'demo' ? (
-        <p className="flex items-center justify-center gap-1.5 text-[12px] text-warning-800">
-          <FlaskConical className="size-3.5" aria-hidden />
-          The assistant is answering from the demo dataset and will say so in every answer.
-        </p>
-      ) : null}
+      {/* --- Composer -------------------------------------------------------- */}
+      <div className="sticky bottom-0 z-10 -mx-4 bg-gradient-to-t from-ink-50 via-ink-50 to-ink-50/0 px-4 pb-4 pt-6 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="mx-auto w-full max-w-3xl">
+          <Composer
+            ref={inputRef}
+            value={input}
+            onChange={setInput}
+            onSubmit={() => void submit(input)}
+            disabled={!enabled}
+            busy={busy}
+            placeholder={
+              enabled ? 'Ask MetroLED about revenue, invoices, quotes or trends…' : 'The assistant is not configured'
+            }
+          />
+          <p className="mt-2.5 text-center text-[12px] text-ink-500">
+            Enter to send · Shift+Enter for a new line
+            {dataMode === 'demo' ? (
+              <span className="ml-2 inline-flex items-center gap-1 text-warning-800">
+                <FlaskConical className="size-3.5" aria-hidden />
+                Answering from the demo dataset
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Composer: pill input with dictation and send
+// ---------------------------------------------------------------------------
+
+const Composer = React.forwardRef<
+  HTMLTextAreaElement,
+  {
+    value: string
+    onChange: (value: string) => void
+    onSubmit: () => void
+    disabled: boolean
+    busy: boolean
+    placeholder: string
+  }
+>(function Composer({ value, onChange, onSubmit, disabled, busy, placeholder }, ref) {
+  const innerRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const setRefs = (node: HTMLTextAreaElement | null) => {
+    innerRef.current = node
+    if (typeof ref === 'function') ref(node)
+    else if (ref) ref.current = node
+  }
+
+  // Grow with the text up to a few lines, then scroll.
+  React.useLayoutEffect(() => {
+    const el = innerRef.current
+    if (!el) return
+    el.style.height = '0px'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [value])
+
+  const dictation = useDictation((transcript) => onChange(value ? `${value} ${transcript}` : transcript))
+  const multiline = value.includes('\n') || (innerRef.current?.scrollHeight ?? 0) > 44
+  const canSend = !disabled && !busy && value.trim().length > 0
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSubmit()
+      }}
+      className={cn(
+        'flex items-end gap-1 border bg-surface py-1.5 pl-5 pr-1.5 shadow-raised transition-[border-color,box-shadow] focus-within:border-brand-500 focus-within:shadow-[0_0_0_4px_rgb(26_86_219/0.10)]',
+        multiline ? 'rounded-3xl' : 'rounded-full',
+        disabled ? 'border-ink-200 bg-ink-50' : 'border-brand-200',
+      )}
+    >
+      <textarea
+        ref={setRefs}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            onSubmit()
+          }
+        }}
+        rows={1}
+        disabled={disabled || busy}
+        aria-label="Ask a question about company data"
+        placeholder={placeholder}
+        className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-6 text-ink-900 placeholder:text-ink-400 focus:outline-none disabled:cursor-not-allowed"
+      />
+      {dictation.supported ? (
+        <button
+          type="button"
+          onClick={dictation.toggle}
+          disabled={disabled || busy}
+          aria-pressed={dictation.listening}
+          aria-label={dictation.listening ? 'Stop dictation' : 'Dictate a question'}
+          title={dictation.listening ? 'Stop dictation' : 'Dictate a question'}
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+            dictation.listening
+              ? 'border-negative-200 bg-negative-50 text-negative-700 animate-pulse'
+              : 'border-ink-200 bg-surface text-ink-600 hover:bg-ink-50 hover:text-ink-900',
+          )}
+        >
+          {dictation.listening ? <MicOff className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}
+        </button>
+      ) : null}
+      <button
+        type="submit"
+        disabled={!canSend}
+        aria-label="Send question"
+        aria-busy={busy || undefined}
+        className={cn(
+          'flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed',
+          canSend
+            ? 'border-brand-600 bg-brand-600 text-white hover:bg-brand-700'
+            : 'border-ink-200 bg-brand-50 text-brand-400',
+        )}
+      >
+        {busy ? (
+          <span className="size-4 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" aria-hidden />
+        ) : (
+          <SendHorizontal className="size-4" aria-hidden />
+        )}
+      </button>
+    </form>
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Dictation (Web Speech API, where the browser has it)
+// ---------------------------------------------------------------------------
+
+type SpeechRecognitionLike = {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+  start: () => void
+  stop: () => void
+}
+
+function speechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === 'undefined') return null
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike
+  }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
+function useDictation(onTranscript: (text: string) => void) {
+  const [listening, setListening] = React.useState(false)
+  const recognitionRef = React.useRef<SpeechRecognitionLike | null>(null)
+  const callbackRef = React.useRef(onTranscript)
+  callbackRef.current = onTranscript
+  const supported = React.useMemo(() => speechRecognitionCtor() !== null, [])
+
+  React.useEffect(() => () => recognitionRef.current?.stop(), [])
+
+  const toggle = () => {
+    if (listening) {
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+    const Ctor = speechRecognitionCtor()
+    if (!Ctor) return
+    const recognition = new Ctor()
+    recognition.lang = navigator.language || 'en-US'
+    recognition.interimResults = false
+    recognition.continuous = false
+    recognition.onresult = (event) => {
+      const last = event.results[event.results.length - 1]
+      const transcript = last?.[0]?.transcript?.trim()
+      if (transcript) callbackRef.current(transcript)
+    }
+    recognition.onend = () => setListening(false)
+    recognition.onerror = () => setListening(false)
+    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      setListening(true)
+    } catch {
+      setListening(false)
+    }
+  }
+
+  return { supported, listening, toggle }
+}
+
+// ---------------------------------------------------------------------------
+// Suggestion topics
+// ---------------------------------------------------------------------------
+
+/** Labels a suggested question with the area it explores, for the card tag and icon. */
+function classify(question: string): { label: string; icon: LucideIcon } {
+  const q = question.toLowerCase()
+  if (/margin|profit/.test(q)) return { label: 'Gross margin', icon: Percent }
+  if (/overdue|invoice|receivable|owed/.test(q)) return { label: 'Receivables', icon: Clock }
+  if (/quote|pipeline|estimate|win rate/.test(q)) return { label: 'Sales pipeline', icon: Target }
+  if (/eco led|shopify|store|order/.test(q)) return { label: 'E-commerce', icon: ShoppingCart }
+  if (/up to date|data|sync|fresh/.test(q)) return { label: 'Data health', icon: Database }
+  if (/changed|compared|trend|most/.test(q)) return { label: 'Explore trends', icon: TrendingUp }
+  if (/look at|today|focus/.test(q)) return { label: 'Daily focus', icon: Sparkles }
+  return { label: 'Investigate', icon: Search }
+}
+
+// ---------------------------------------------------------------------------
+// Assistant turn
+// ---------------------------------------------------------------------------
 
 function AssistantTurn({ turn }: { turn: Turn }) {
   if (turn.pending) {
@@ -304,7 +490,7 @@ function AssistantTurn({ turn }: { turn: Turn }) {
         <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-100">
           <Sparkles className="size-3.5 text-brand-700" aria-hidden />
         </span>
-        <div className="flex-1 rounded-xl rounded-tl-sm border border-ink-200 bg-white px-3.5 py-3 shadow-card">
+        <div className="flex-1 rounded-2xl rounded-tl-md border border-ink-200 bg-surface px-4 py-3 shadow-card">
           <div className="flex items-center gap-2 text-[13px] text-ink-600">
             <span className="flex gap-1" aria-hidden>
               <span className="size-1.5 animate-pulse rounded-full bg-ink-400" />
@@ -327,7 +513,7 @@ function AssistantTurn({ turn }: { turn: Turn }) {
       </span>
 
       <div className="min-w-0 flex-1 space-y-2.5">
-        <div className="rounded-xl rounded-tl-sm border border-ink-200 bg-white px-4 py-3 shadow-card">
+        <div className="rounded-2xl rounded-tl-md border border-ink-200 bg-surface px-4 py-3 shadow-card">
           {turn.error ? (
             <Alert tone="negative" title="The assistant could not answer">
               {turn.content}

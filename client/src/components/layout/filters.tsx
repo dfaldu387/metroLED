@@ -70,7 +70,7 @@ export interface FilterBarProps {
 }
 
 const triggerClasses =
-  'flex h-9 items-center justify-between gap-2 rounded-lg border border-ink-300 bg-white px-3 text-sm text-ink-900 shadow-card transition-colors hover:border-ink-400 focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20'
+  'flex h-9 items-center justify-between gap-2 rounded-lg border border-ink-300 bg-surface px-3 text-sm text-ink-900 shadow-card transition-colors hover:border-ink-400 focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20'
 
 interface FilterOption {
   value: string

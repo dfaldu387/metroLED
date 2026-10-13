@@ -49,7 +49,7 @@ function SalesPipeline({ data }: { data: SalesPipelinePageData }) {
 
       <PageHeader
         title="Sales Pipeline"
-        description="Open quotes from Method CRM: what they are worth, where they stand, and which ones have gone quiet."
+        description="Open quotes by value and stage, and which ones have gone quiet."
         meta={
           <>
             <MetaFact label="Pipeline as at" value="now" />

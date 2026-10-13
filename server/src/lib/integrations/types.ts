@@ -191,17 +191,38 @@ export interface ProviderAdapter {
   fetchPayments?(context: SyncContext): Promise<Page<NormalizedPayment>>
   fetchQuotes?(context: SyncContext): Promise<Page<NormalizedQuote>>
   fetchOrders?(context: SyncContext): Promise<Page<NormalizedOrder>>
-  /** Monthly direct-cost totals per account, for the gross margin basis. */
-  fetchCogs?(context: SyncContext): Promise<
-    Page<{
-      periodStart: Date
-      periodEnd: Date
-      accountSourceId: string
-      accountName: string
-      accountType: string | null
-      amount: number
-    }>
-  >
+  /**
+   * Chart of accounts (entity "accounts"): the candidate direct-cost accounts
+   * Finance ticks on the Settings screen. Returns no items; it writes the
+   * `CogsAccountMapping` rows itself.
+   */
+  fetchAccounts?(context: SyncContext): Promise<Page<never>>
+  /** Monthly direct-cost totals (entity "cogs"), for the gross margin basis. */
+  fetchCogs?(context: SyncContext): Promise<Page<NormalizedCostPeriod>>
+}
+
+/**
+ * One calendar month of direct cost, broken down by the provider's own
+ * grouping (a QuickBooks class). The sync maps each group to a division with
+ * the same rules used for invoices, so the cost and the revenue it belongs to
+ * are attributed the same way.
+ */
+export interface NormalizedCostPeriod {
+  periodStart: Date
+  periodEnd: Date
+  currency: string
+  /** Human-readable description of how the figure was built, stored as the cost basis. */
+  basis: string
+  groups: {
+    /** Fields the division mapping rules can match on (e.g. `{ class: "Pixel LED Displays" }`). */
+    mappingFields: Record<string, string | null>
+    /** Label shown when the group matches no division. */
+    label: string
+    amount: number
+    accounts: { sourceId: string; name: string; amount: number }[]
+  }[]
+  /** When the figures were read, so the next incremental run re-reads only recent months. */
+  sourceUpdatedAt: Date
 }
 
 export interface EntityResult {

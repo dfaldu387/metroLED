@@ -1,16 +1,21 @@
 import { db, sql, upsert } from '../db'
-import { env, integrationEnv } from '../env'
+import { env } from '../env'
 import { ProviderAuthError, providerJson, RateLimiter, type RequestCounter } from './http'
 import { readCredentials, writeCredentials, type QuickBooksCredentials } from './credentials'
+import { quickBooksApp, quickBooksRedirectUri } from './quickbooks-app'
 import type {
+  NormalizedCostPeriod,
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedInvoiceLine,
   NormalizedPayment,
+  NormalizedQuote,
   Page,
   ProviderAdapter,
   SyncContext,
 } from './types'
+import { accountAmountsByClass, type PlReport } from './quickbooks-reports'
+import { addMonths, endOfMonth, startOfMonth, toIsoDate } from '@shared/dates'
 
 /**
  * QuickBooks Online adapter.
@@ -34,8 +39,9 @@ import type {
 const PAGE_SIZE = 200
 const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
 
-function apiBase(): string {
-  return env().QBO_ENVIRONMENT === 'production'
+async function apiBase(): Promise<string> {
+  const { environment } = await quickBooksApp()
+  return environment === 'production'
     ? 'https://quickbooks.api.intuit.com'
     : 'https://sandbox-quickbooks.api.intuit.com'
 }
@@ -94,6 +100,14 @@ interface QboLine {
     UnitPrice?: number
     ClassRef?: QboRef
   }
+}
+
+/** An estimate is the QuickBooks quote: an invoice shape plus its acceptance state. */
+interface QboEstimate extends QboInvoice {
+  TxnStatus?: string
+  ExpirationDate?: string
+  AcceptedDate?: string
+  LinkedTxn?: { TxnId?: string; TxnType?: string }[]
 }
 
 interface QboCustomer {
@@ -163,10 +177,10 @@ async function accessTokenFor(integrationId: string, counter: RequestCounter): P
     )
   }
 
-  const { clientId, clientSecret } = integrationEnv.quickbooks()
+  const { clientId, clientSecret } = await quickBooksApp()
   if (!clientId || !clientSecret) {
     throw new ProviderAuthError(
-      'QBO_CLIENT_ID and QBO_CLIENT_SECRET are not configured on this deployment.',
+      'The Intuit app keys (Client ID and Client Secret) are not configured. Add them on the Data Health page.',
       401,
       '',
       'QuickBooks Online',
@@ -247,7 +261,7 @@ async function runQuery<T>(
     ` ORDER BY MetaData.LastUpdatedTime ASC STARTPOSITION ${startPosition} MAXRESULTS ${PAGE_SIZE}`
 
   const url =
-    `${apiBase()}/v3/company/${encodeURIComponent(credentials.realmId)}/query` +
+    `${await apiBase()}/v3/company/${encodeURIComponent(credentials.realmId)}/query` +
     `?query=${encodeURIComponent(query)}&minorversion=${env().QBO_MINOR_VERSION}`
 
   await limiter.acquire()
@@ -299,13 +313,13 @@ function incrementalWhere(context: SyncContext): string {
 export const quickBooksAdapter: ProviderAdapter = {
   provider: 'QUICKBOOKS',
   displayName: 'QuickBooks Online',
-  entities: ['customers', 'accounts', 'invoices', 'payments'],
+  entities: ['customers', 'accounts', 'invoices', 'payments', 'quotes', 'cogs'],
   minRequestIntervalMs: 150,
 
   async testConnection(context) {
     const credentials = await accessTokenFor(context.integrationId, context.counter)
     const url =
-      `${apiBase()}/v3/company/${encodeURIComponent(credentials.realmId)}/companyinfo/${encodeURIComponent(credentials.realmId)}` +
+      `${await apiBase()}/v3/company/${encodeURIComponent(credentials.realmId)}/companyinfo/${encodeURIComponent(credentials.realmId)}` +
       `?minorversion=${env().QBO_MINOR_VERSION}`
 
     await limiter.acquire()
@@ -442,6 +456,141 @@ export const quickBooksAdapter: ProviderAdapter = {
   },
 
   /**
+   * Estimates, reported in the sales pipeline alongside Method CRM quotes.
+   *
+   * QuickBooks keeps the acceptance state on the estimate itself: Pending,
+   * Accepted, Closed (converted to an invoice or closed by hand) or Rejected.
+   * A pending estimate past its expiry date is reported as expired.
+   */
+  async fetchQuotes(context): Promise<Page<NormalizedQuote>> {
+    const start = parseCursor(context.cursor)
+    const { rows, hasMore } = await runQuery<QboEstimate>(context, 'Estimate', incrementalWhere(context), start)
+
+    const items = rows.map<NormalizedQuote>((row) => {
+      const issuedOn = parseDate(row.TxnDate) ?? new Date()
+      const expiresOn = parseDate(row.ExpirationDate)
+      const updatedAt = parseDate(row.MetaData?.LastUpdatedTime)
+      const { status, stage, normalized } = estimateStage(row, expiresOn, context.until)
+
+      const lines: NormalizedInvoiceLine[] = (row.Line ?? [])
+        .filter((line) => line.DetailType === 'SalesItemLineDetail')
+        .map((line, index) => ({
+          sourceLineId: line.Id ?? null,
+          lineNumber: line.LineNum ?? index + 1,
+          description: line.Description ?? null,
+          itemSourceId: line.SalesItemLineDetail?.ItemRef?.value ?? null,
+          itemName: line.SalesItemLineDetail?.ItemRef?.name ?? null,
+          quantity: line.SalesItemLineDetail?.Qty ?? 1,
+          unitPrice: line.SalesItemLineDetail?.UnitPrice ?? 0,
+          amount: round2(line.Amount ?? 0),
+        }))
+
+      return {
+        sourceId: row.Id,
+        docNumber: row.DocNumber ?? row.Id,
+        customerSourceId: row.CustomerRef?.value ?? null,
+        customerName: row.CustomerRef?.name ?? null,
+        salesRepSourceId: row.SalesRepRef?.value ?? null,
+        salesRepName: row.SalesRepRef?.name ?? customFieldValue(row.CustomField, 'Sales Rep'),
+        status,
+        stage,
+        stageNormalized: normalized,
+        currency: row.CurrencyRef?.value ?? 'CAD',
+        amount: round2(row.TotalAmt ?? 0),
+        issuedOn,
+        expiresOn,
+        closedOn:
+          status === 'WON' || status === 'LOST'
+            ? (parseDate(row.AcceptedDate) ?? updatedAt)
+            : status === 'EXPIRED'
+              ? expiresOn
+              : null,
+        lastActivityAt: updatedAt ?? issuedOn,
+        sourceCreatedAt: parseDate(row.MetaData?.CreateTime),
+        sourceUpdatedAt: updatedAt,
+        lines,
+        mappingFields: {
+          class: row.ClassRef?.name ?? null,
+          department: row.DepartmentRef?.name ?? null,
+          customer: row.CustomerRef?.name ?? null,
+          item: lines[0]?.itemName ?? null,
+          docNumber: row.DocNumber ?? null,
+        },
+      }
+    })
+    return { items, nextCursor: hasMore ? String(start + rows.length) : null }
+  },
+
+  /**
+   * Monthly direct cost, from the Profit and Loss report summarised by class.
+   *
+   * Only the accounts Finance has ticked as direct cost are summed, so the
+   * figure follows the approved cost basis and never includes operating
+   * expenses. Reading the report rather than individual bills means inventory
+   * cost posted automatically at the point of sale is included too. An
+   * incremental run re-reads the last three months, because bills are often
+   * entered after the month they belong to; a backfill re-reads the window.
+   */
+  async fetchCogs(context): Promise<Page<NormalizedCostPeriod>> {
+    const included = await db.many<{ sourceAccountId: string }>(sql`
+      SELECT "sourceAccountId" FROM "CogsAccountMapping" WHERE "includeInCogs" = true`)
+    if (included.length === 0) {
+      context.log('No QuickBooks account is flagged as direct cost, so no cost periods were read.')
+      return { items: [], nextCursor: null }
+    }
+    const accountIds = new Set(included.map((row) => row.sourceAccountId))
+    const credentials = await accessTokenFor(context.integrationId, context.counter)
+    const base = `${await apiBase()}/v3/company/${encodeURIComponent(credentials.realmId)}/reports/ProfitAndLoss`
+
+    const firstMonth = startOfMonth(context.since ? addMonths(context.since, -2) : addMonths(context.until, -24))
+    const lastMonth = startOfMonth(context.until)
+    const readAt = new Date()
+    const items: NormalizedCostPeriod[] = []
+
+    for (let month = firstMonth; month <= lastMonth; month = startOfMonth(addMonths(month, 1))) {
+      if (context.signal?.aborted) break
+      const periodEnd = endOfMonth(month)
+      const url =
+        `${base}?start_date=${toIsoDate(month)}&end_date=${toIsoDate(periodEnd)}` +
+        `&accounting_method=Accrual&summarize_column_by=Classes&minorversion=${env().QBO_MINOR_VERSION}`
+
+      await limiter.acquire()
+      const report = await providerJson<PlReport>(url, {
+        provider: 'QuickBooks Online',
+        headers: { Authorization: `Bearer ${credentials.accessToken}` },
+        counter: context.counter,
+        onRetry: context.onRetry,
+        signal: context.signal,
+      })
+
+      const groups = new Map<string, NormalizedCostPeriod['groups'][number]>()
+      for (const row of accountAmountsByClass(report, accountIds)) {
+        const key = row.classId ?? ''
+        const group = groups.get(key) ?? {
+          mappingFields: { class: row.classId ? row.classTitle : null },
+          label: row.classTitle,
+          amount: 0,
+          accounts: [],
+        }
+        group.amount = round2(group.amount + row.amount)
+        group.accounts.push({ sourceId: row.accountId, name: row.accountName, amount: row.amount })
+        groups.set(key, group)
+      }
+
+      items.push({
+        periodStart: month,
+        periodEnd,
+        currency: 'USD',
+        basis: 'QuickBooks Profit and Loss (accrual) by class, direct-cost accounts only',
+        groups: [...groups.values()],
+        sourceUpdatedAt: readAt,
+      })
+    }
+
+    return { items, nextCursor: null }
+  },
+
+  /**
    * Chart of accounts.
    *
    * Imported so Finance can decide which accounts count as direct cost on the
@@ -450,7 +599,7 @@ export const quickBooksAdapter: ProviderAdapter = {
    * every change is written to the audit log - the classification is a
    * financial decision, not an automatic one.
    */
-  async fetchCogs(context) {
+  async fetchAccounts(context): Promise<Page<never>> {
     const start = parseCursor(context.cursor)
     const { rows, hasMore } = await runQuery<QboAccount>(
       context,
@@ -518,14 +667,32 @@ function invoiceStatus(
   return 'OPEN'
 }
 
+/** Maps an estimate's acceptance state to the pipeline status. */
+function estimateStage(
+  row: QboEstimate,
+  expiresOn: Date | null,
+  now: Date,
+): { status: NormalizedQuote['status']; stage: string; normalized: string } {
+  const value = (row.TxnStatus ?? 'Pending').trim().toLowerCase()
+  const converted = (row.LinkedTxn ?? []).some((t) => t.TxnType === 'Invoice')
+
+  if (value === 'accepted' || value === 'converted' || (value === 'closed' && converted)) {
+    return { status: 'WON', stage: converted ? 'Converted to invoice' : 'Accepted', normalized: 'closed_won' }
+  }
+  if (value === 'rejected') return { status: 'LOST', stage: 'Rejected', normalized: 'closed_lost' }
+  if (value === 'closed') return { status: 'LOST', stage: 'Closed', normalized: 'closed_lost' }
+  if (expiresOn && expiresOn < now) return { status: 'EXPIRED', stage: 'Expired', normalized: 'expired' }
+  return { status: 'OPEN', stage: 'Pending', normalized: 'pending' }
+}
+
 /** Builds the OAuth authorisation URL for connecting QuickBooks. */
-export function quickBooksAuthorizeUrl(state: string): string {
-  const { clientId } = integrationEnv.quickbooks()
+export async function quickBooksAuthorizeUrl(state: string): Promise<string> {
+  const { clientId } = await quickBooksApp()
   const params = new URLSearchParams({
     client_id: clientId ?? '',
     response_type: 'code',
     scope: 'com.intuit.quickbooks.accounting',
-    redirect_uri: `${env().APP_URL}/api/integrations/quickbooks/callback`,
+    redirect_uri: quickBooksRedirectUri(),
     state,
   })
   return `https://appcenter.intuit.com/connect/oauth2?${params.toString()}`
@@ -536,9 +703,9 @@ export async function exchangeQuickBooksCode(
   code: string,
   realmId: string,
 ): Promise<QuickBooksCredentials> {
-  const { clientId, clientSecret } = integrationEnv.quickbooks()
+  const { clientId, clientSecret } = await quickBooksApp()
   if (!clientId || !clientSecret) {
-    throw new Error('QBO_CLIENT_ID and QBO_CLIENT_SECRET must be configured before connecting QuickBooks.')
+    throw new Error('The Intuit app keys (Client ID and Client Secret) must be saved before connecting QuickBooks.')
   }
 
   const response = await fetch(TOKEN_URL, {
@@ -551,7 +718,7 @@ export async function exchangeQuickBooksCode(
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: `${env().APP_URL}/api/integrations/quickbooks/callback`,
+      redirect_uri: quickBooksRedirectUri(),
     }).toString(),
     // No `cache: 'no-store'`: that was a Next.js fetch-cache hint; Node's fetch never caches.
   })

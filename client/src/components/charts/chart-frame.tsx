@@ -154,7 +154,7 @@ export function ChartTooltip({
   rows: { label: string; value: string; color?: string; muted?: boolean }[]
 }) {
   return (
-    <div className="pointer-events-none rounded-lg border border-ink-200 bg-white px-3 py-2 shadow-overlay">
+    <div className="pointer-events-none rounded-lg border border-ink-200 bg-surface px-3 py-2 shadow-overlay">
       <p className="mb-1.5 text-[12px] font-semibold text-ink-900">{title}</p>
       <div className="space-y-1">
         {rows.map((row) => (

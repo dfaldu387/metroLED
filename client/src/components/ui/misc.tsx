@@ -28,7 +28,7 @@ export const DropdownMenuContent = React.forwardRef<
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          'z-50 min-w-52 overflow-hidden rounded-lg border border-ink-200 bg-white p-1 shadow-overlay',
+          'z-50 min-w-52 overflow-hidden rounded-lg border border-ink-200 bg-surface p-1 shadow-overlay',
           className,
         )}
         {...props}
@@ -129,7 +129,7 @@ export const Switch = React.forwardRef<
       )}
       {...props}
     >
-      <SwitchPrimitive.Thumb className="pointer-events-none block size-4 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
+      <SwitchPrimitive.Thumb className="pointer-events-none block size-4 rounded-full bg-surface shadow transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
     </SwitchPrimitive.Root>
   )
 })
@@ -142,7 +142,7 @@ export const Checkbox = React.forwardRef<
     <CheckboxPrimitive.Root
       ref={ref}
       className={cn(
-        'peer size-4 shrink-0 rounded border border-ink-300 bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-brand-600 data-[state=checked]:bg-brand-600',
+        'peer size-4 shrink-0 rounded border border-ink-300 bg-surface transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-brand-600 data-[state=checked]:bg-brand-600',
         className,
       )}
       {...props}
