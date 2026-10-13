@@ -15,6 +15,10 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   server: {
+    // Listen on every loopback family: a bare `localhost` binding ends up
+    // IPv6-only on recent Node, and a browser that resolves localhost to
+    // 127.0.0.1 then cannot reach the dev server at all.
+    host: true,
     port: 5173,
     strictPort: true,
     // Same-origin API in development: the session cookie works without CORS.

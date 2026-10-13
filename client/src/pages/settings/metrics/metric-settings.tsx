@@ -31,6 +31,18 @@ interface DefinitionRow {
   approvedAt: string | null
 }
 
+interface CostPeriodRow {
+  id: string
+  divisionName: string
+  divisionCode: string
+  periodStart: string
+  cogsAmount: number
+  isApproved: boolean
+  approvedBy: string | null
+  basis: string
+  note: string | null
+}
+
 export function MetricSettings({
   definitions,
   cogsAccounts,
@@ -48,16 +60,7 @@ export function MetricSettings({
     includeInCogs: boolean
     note: string | null
   }[]
-  costPeriods: {
-    id: string
-    divisionName: string
-    divisionCode: string
-    periodStart: string
-    cogsAmount: number
-    isApproved: boolean
-    approvedBy: string | null
-    basis: string
-  }[]
+  costPeriods: CostPeriodRow[]
   reconciliations: {
     id: string
     metricName: string
@@ -73,11 +76,16 @@ export function MetricSettings({
   canManage: boolean
 }) {
   const [result, setResult] = React.useState<SettingsResult | null>(null)
-  const { approveMetricDefinition, setCogsAccountIncluded } = useSettingsActions()
+  const { approveMetricDefinition, setCogsAccountIncluded, approveCostPeriod, approveAllCostPeriods } =
+    useSettingsActions()
   const [busy, setBusy] = React.useState(false)
   const [confirmApproval, setConfirmApproval] = React.useState<{ definition: DefinitionRow; approve: boolean } | null>(
     null,
   )
+  const [confirmCost, setConfirmCost] = React.useState<
+    { kind: 'one'; period: CostPeriodRow; approve: boolean } | { kind: 'all'; count: number } | null
+  >(null)
+  const pendingCostPeriods = costPeriods.filter((p) => !p.isApproved).length
 
   const run = async (action: (formData: FormData) => Promise<SettingsResult>, formData: FormData) => {
     setBusy(true)
@@ -89,6 +97,7 @@ export function MetricSettings({
     } finally {
       setBusy(false)
       setConfirmApproval(null)
+      setConfirmCost(null)
     }
   }
 
@@ -300,12 +309,22 @@ export function MetricSettings({
           <Card>
             <CardHeader>
               <div>
-                <CardTitle>Approved cost of goods sold by month</CardTitle>
+                <CardTitle>Cost of goods sold by month</CardTitle>
                 <CardDescription>
-                  Gross margin is only reported for a period once every month inside it has an approved cost
-                  figure. Unapproved months show as unavailable rather than being estimated.
+                  Read from QuickBooks on every sync. Margin is reported only for months Finance has approved.
                 </CardDescription>
               </div>
+              {canApprove && pendingCostPeriods > 0 ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmCost({ kind: 'all', count: pendingCostPeriods })}
+                  disabled={busy}
+                >
+                  <CheckCircle2 aria-hidden />
+                  Approve all pending ({pendingCostPeriods})
+                </Button>
+              ) : null}
             </CardHeader>
 
             {costPeriods.length === 0 ? (
@@ -347,11 +366,29 @@ export function MetricSettings({
                           </span>
                         </TD>
                         <TD numeric>{formatCurrency(period.cogsAmount)}</TD>
-                        <TD className="text-[12px] text-ink-600">{period.basis}</TD>
+                        <TD className="max-w-[16rem] text-[12px] leading-4 text-ink-600">{period.basis}</TD>
                         <TD>
-                          <Badge variant={period.isApproved ? 'positive' : 'warning'} size="sm">
-                            {period.isApproved ? `Approved${period.approvedBy ? ` by ${period.approvedBy}` : ''}` : 'Not approved'}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={period.isApproved ? 'positive' : 'warning'} size="sm">
+                              {period.isApproved ? 'Approved' : 'Not approved'}
+                            </Badge>
+                            {canApprove ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => setConfirmCost({ kind: 'one', period, approve: !period.isApproved })}
+                              >
+                                {period.isApproved ? 'Withdraw' : 'Approve'}
+                              </Button>
+                            ) : null}
+                          </div>
+                          {period.isApproved && period.approvedBy ? (
+                            <span className="mt-0.5 block text-[11.5px] text-ink-500">by {period.approvedBy}</span>
+                          ) : null}
+                          {period.note ? (
+                            <span className="mt-0.5 block max-w-[18rem] text-[11.5px] leading-4 text-warning-800">{period.note}</span>
+                          ) : null}
                         </TD>
                       </TR>
                     ))}
@@ -425,6 +462,46 @@ export function MetricSettings({
       </Tabs>
 
       <ConfirmDialog
+        open={confirmCost !== null}
+        onOpenChange={(open) => !open && setConfirmCost(null)}
+        title={
+          confirmCost?.kind === 'all'
+            ? `Approve ${confirmCost.count} cost periods?`
+            : confirmCost?.approve
+              ? `Approve the cost figure for ${confirmCost.period.divisionName}, ${costMonth(confirmCost.period.periodStart)}?`
+              : `Withdraw approval for ${confirmCost?.period.divisionName}, ${confirmCost ? costMonth(confirmCost.period.periodStart) : ''}?`
+        }
+        description={
+          confirmCost?.kind === 'all' ? (
+            <p>
+              Every month not yet approved is marked as checked by you. Gross margin for those months is then reported
+              as verified. Your name and the time are recorded in the audit log.
+            </p>
+          ) : confirmCost?.approve ? (
+            <p>
+              You are confirming {formatCurrency(confirmCost.period.cogsAmount)} of direct cost for this month matches
+              the QuickBooks report. Your name and the time are recorded in the audit log.
+            </p>
+          ) : (
+            <p>Gross margin for this month becomes unavailable until the figure is approved again.</p>
+          )
+        }
+        confirmLabel={confirmCost?.kind === 'all' ? 'Approve all' : confirmCost?.approve ? 'Approve' : 'Withdraw approval'}
+        loading={busy}
+        onConfirm={() => {
+          if (!confirmCost) return
+          if (confirmCost.kind === 'all') {
+            void run(() => approveAllCostPeriods(), new FormData())
+            return
+          }
+          const formData = new FormData()
+          formData.set('periodId', confirmCost.period.id)
+          formData.set('approve', String(confirmCost.approve))
+          void run(approveCostPeriod, formData)
+        }}
+      />
+
+      <ConfirmDialog
         open={confirmApproval !== null}
         onOpenChange={(open) => !open && setConfirmApproval(null)}
         title={
@@ -463,6 +540,10 @@ export function MetricSettings({
       />
     </>
   )
+}
+
+function costMonth(periodStart: string): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(periodStart))
 }
 
 function Detail({ label, value, wide }: { label: string; value: string; wide?: boolean }) {

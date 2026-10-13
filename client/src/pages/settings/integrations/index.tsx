@@ -1,7 +1,8 @@
+import * as React from 'react'
 import { ExternalLink, KeyRound, ShieldCheck } from 'lucide-react'
 import { formatRelativeTime } from '@shared/dates'
 import type { IntegrationsSettingsPageData } from '@shared/api/admin'
-import { Link, useDocumentTitle } from '@/lib/navigation'
+import { Link, useDocumentTitle, useSearchParams } from '@/lib/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge, StatusDot } from '@/components/ui/badge'
@@ -9,6 +10,7 @@ import { Alert } from '@/components/ui/feedback'
 import { PageQuery } from '@/components/layout/page-error'
 import { FormPageSkeleton } from '@/components/layout/page-skeleton'
 import { ADMIN_KEYS, useAdminPage } from '@/pages/users/admin-client'
+import { ConnectSourceActions, type ConnectableSource } from '@/pages/data-health/connect-source'
 
 /**
  * Integration status and connection management (section 17).
@@ -36,9 +38,28 @@ export default function IntegrationsSettingsPage() {
 
 function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
   const now = new Date()
+  const params = useSearchParams()
+  const oauthMessage = params.get('message')
+  const oauthOk = Boolean(params.get('connected'))
+  const [outcome, setOutcome] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(
+    oauthMessage ? { tone: oauthOk ? 'positive' : 'negative', message: oauthMessage } : null,
+  )
 
   return (
     <div className="space-y-4">
+      {outcome ? (
+        <Alert
+          tone={outcome.tone}
+          title={outcome.tone === 'positive' ? 'Connection updated' : 'The connection could not be made'}
+          action={
+            <button type="button" onClick={() => setOutcome(null)} className="text-[12.5px] font-medium text-ink-600 hover:text-ink-900">
+              Dismiss
+            </button>
+          }
+        >
+          {outcome.message}
+        </Alert>
+      ) : null}
       {!data.encryptionConfigured ? (
         <Alert tone="negative" title="Credentials cannot be stored on this deployment">
           <code className="font-mono text-[12px]">CREDENTIAL_ENCRYPTION_KEY</code> is missing or is not exactly 32
@@ -46,9 +67,7 @@ function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
         </Alert>
       ) : (
         <Alert tone="info" title="How credentials are handled">
-          Access tokens, API keys and webhook secrets are encrypted at rest with AES-256-GCM and decrypted only
-          inside the synchronisation service. They are never returned by an API route and never rendered on a
-          screen, including this one.
+          Keys and tokens are encrypted at rest and never shown again after you enter them.
         </Alert>
       )}
 
@@ -63,6 +82,17 @@ function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
       {data.providers.map((definition) => {
         const row = definition.row
         const status = row?.status ?? 'NOT_CONFIGURED'
+        const isOAuth = definition.connectUrl !== null
+        const source: ConnectableSource = {
+          provider: definition.provider as ConnectableSource['provider'],
+          displayName: definition.name,
+          credentialSource: row?.credentialStored ? 'stored' : !isOAuth && definition.envReady ? 'environment' : 'none',
+          connectMethod: isOAuth ? 'oauth' : definition.provider === 'MONDAY' ? 'none' : 'form',
+          oauthAppConfigured: isOAuth ? definition.envReady : true,
+          oauthAppSource: isOAuth ? (definition.envReady ? 'environment' : 'none') : 'none',
+          oauthEnvironment: null,
+          oauthRedirectUri: null,
+        }
         const tone =
           status === 'ERROR'
             ? 'negative'
@@ -172,10 +202,13 @@ function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
                   Provider documentation
                 </a>
               </Button>
-              {definition.connectUrl && data.canManage && definition.envReady ? (
-                <Button asChild variant="secondary" size="sm">
-                  <a href={definition.connectUrl}>Connect {definition.name}</a>
-                </Button>
+              {data.canManage && data.dbReady ? (
+                <ConnectSourceActions
+                  row={source}
+                  encryptionReady={data.encryptionConfigured}
+                  onOutcome={setOutcome}
+                  returnTo="settings"
+                />
               ) : null}
               <Button asChild variant="ghost" size="sm" className="ml-auto">
                 <Link href="/data-health">Test connection and run a sync</Link>
@@ -186,8 +219,7 @@ function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
       })}
 
       <p className="text-[12px] leading-5 text-ink-500">
-        MetroLED Intelligence reads from these systems and never writes to them. It does not create, update or
-        cancel an invoice, a quote or an order.
+        MetroLED Intelligence only reads from these systems. It never writes back to them.
       </p>
     </div>
   )

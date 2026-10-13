@@ -26,6 +26,9 @@
   --color-brand-900: #1c3573;
   --color-brand-950: #152347;
 
+  /* --- Surface: cards, panels, menus. White in light mode. --------------- */
+  --color-surface: #ffffff;
+
   /* --- Neutrals (page, surfaces, borders, text) -------------------------- */
   --color-ink-50: #f8fafc;
   --color-ink-100: #f1f5f9;
@@ -91,6 +94,73 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Dark theme
+
+   The ink scale is inverted (ink-50 is the page, ink-900 the text) and every
+   tint used behind text is deepened so the same utility classes keep their
+   meaning. Applied by `data-theme="dark"` on <html> (lib/theme.ts) or, when no
+   explicit choice is stored, by the operating system preference.
+   --------------------------------------------------------------------------- */
+
+@layer theme {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-surface: #111a2e;
+
+    --color-ink-50: #0b1220;
+    --color-ink-100: #16203a;
+    --color-ink-200: #22304d;
+    --color-ink-300: #33425f;
+    --color-ink-400: #5f6f8d;
+    --color-ink-500: #8b9ab5;
+    --color-ink-600: #a9b6cc;
+    --color-ink-700: #c5cfdf;
+    --color-ink-800: #dde4ef;
+    --color-ink-900: #eef2f8;
+    --color-ink-950: #f8fafc;
+
+    --color-brand-50: #16243f;
+    --color-brand-100: #1b2f57;
+    --color-brand-200: #22407a;
+    --color-brand-300: #2d56a8;
+    --color-brand-700: #8ab0ff;
+    --color-brand-800: #a9c4ff;
+    --color-brand-900: #c7d8ff;
+
+    --color-positive-50: #0f2a22;
+    --color-positive-100: #134032;
+    --color-positive-200: #1b5a46;
+    --color-positive-700: #4ade80;
+    --color-positive-800: #86efac;
+
+    --color-negative-50: #2d1515;
+    --color-negative-100: #431c1c;
+    --color-negative-200: #5c2323;
+    --color-negative-700: #f87171;
+    --color-negative-800: #fca5a5;
+
+    --color-warning-50: #2a200b;
+    --color-warning-100: #3f3010;
+    --color-warning-200: #5a4414;
+    --color-warning-300: #7a5c1a;
+    --color-warning-700: #fbbf24;
+    --color-warning-800: #fcd34d;
+
+    --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-raised: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+    --shadow-overlay: 0 10px 32px -4px rgb(0 0 0 / 0.55), 0 4px 10px -4px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* Solid brand buttons keep a dark hover in dark mode; the lightened brand-700
+   above is for text and icons on tinted backgrounds. */
+:root[data-theme='dark'] .hover\:bg-brand-700:hover,
+:root[data-theme='dark'] .active\:bg-brand-800:active {
+  background-color: #2f6ae6;
+}
+
+/* ---------------------------------------------------------------------------
    Base
    --------------------------------------------------------------------------- */
 
@@ -148,6 +218,10 @@
     background-color: var(--color-brand-100);
   }
 
+  :root[data-theme='dark'] ::selection {
+    background-color: var(--color-brand-200);
+  }
+
   /* Respect a reader's preference: no decorative motion. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -167,7 +241,7 @@
 
 @layer components {
   .surface {
-    background-color: #ffffff;
+    background-color: var(--color-surface);
     border: 1px solid var(--color-ink-200);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);

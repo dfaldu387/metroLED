@@ -46,7 +46,7 @@ function Revenue({ data }: { data: RevenuePageData }) {
 
       <PageHeader
         title="Revenue"
-        description="Invoiced sales excluding tax, by invoice date. Every figure traces back to a QuickBooks invoice."
+        description="Invoiced sales excluding tax, by invoice date."
         meta={
           <>
             <MetaFact label="Period" value={range.label} />

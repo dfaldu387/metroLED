@@ -55,7 +55,7 @@ function DailyBrief({ data }: { data: DailyBriefPageData }) {
 
       <PageHeader
         title="Daily Brief"
-        description={`Yesterday in one page: revenue and cash, newly overdue invoices, stale quotes, Shopify highlights and sync health.`}
+        description="Yesterday in one page: revenue, cash, overdue invoices, stale quotes and sync health."
         meta={
           <>
             <MetaFact label="Reporting on" value={briefDateLabel} />

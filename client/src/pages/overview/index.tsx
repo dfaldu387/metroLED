@@ -42,7 +42,6 @@ function Overview({ data }: { data: OverviewPageData }) {
 
       <PageHeader
         title={`${data.greeting}, ${data.firstName}`}
-        description="Here is how your business is performing."
         meta={
           <>
             <MetaFact label="Period" value={range.label} />
@@ -106,7 +105,7 @@ function Overview({ data }: { data: OverviewPageData }) {
           {data.attention.length === 0 ? (
             <EmptyState
               title="Nothing needs attention right now"
-              description="No newly overdue invoices, no stale large quotes, no failing integrations and no unmatched records. This list fills itself in when something changes."
+              description="Nothing needs attention right now."
             />
           ) : (
             <AttentionList items={data.attention} />
@@ -137,7 +136,7 @@ function Overview({ data }: { data: OverviewPageData }) {
                 data={data.revenue.trend}
                 currentLabel={range.label}
                 comparisonLabel={range.comparisonLabel}
-                footnote="Source: QuickBooks Online. Excludes draft and voided invoices, and excludes sales tax."
+                footnote="Source: QuickBooks Online, excluding tax and voided invoices."
               />
             </CardContent>
           </Card>

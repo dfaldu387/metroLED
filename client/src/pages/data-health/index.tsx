@@ -1,8 +1,9 @@
+import * as React from 'react'
 import { Database, Link2Off } from 'lucide-react'
 import type { DataHealthPageData } from '@shared/api/operations'
 import { formatRelativeTime } from '@shared/dates'
 import { formatDateTime, formatDuration, formatInteger, humanizeEnum } from '@shared/format'
-import { useDocumentTitle } from '@/lib/navigation'
+import { useDocumentTitle, useRouter, useSearchParams } from '@/lib/navigation'
 import { usePageData } from '@/lib/query'
 import { PageQuery } from '@/components/layout/page-error'
 import { TablePageSkeleton } from '@/components/layout/page-skeleton'
@@ -13,6 +14,7 @@ import { DataModeBanner, MetaFact, PageHeader } from '@/components/layout/page-h
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc'
 import { TBody, TD, TH, THead, TR, Table, TableScroll } from '@/components/ui/table'
 import { SyncControls } from './sync-controls'
+import { ConnectSourceActions } from './connect-source'
 
 /**
  * Data Health (section 13).
@@ -35,8 +37,10 @@ const toDate = (value: string | null): Date | null => (value ? new Date(value) :
 
 function DataHealth({ data }: { data: DataHealthPageData }) {
   const now = new Date(data.now)
-  const { dbReady, usingDemo, canManage, rows, recentRuns, recentErrors, unmatched, pendingJobs, deadJobs, tab } = data
+  const { dbReady, usingDemo, canManage, canConnect, rows, recentRuns, recentErrors, unmatched, pendingJobs, deadJobs, tab } = data
   const lastRefresh = toDate(data.lastRefreshAt)
+  const outcome = useConnectionOutcome()
+  const showActions = canConnect && dbReady && !usingDemo
 
   return (
     <>
@@ -73,6 +77,21 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
         </Alert>
       ) : null}
 
+      {outcome.current ? (
+        <Alert
+          tone={outcome.current.tone}
+          title={outcome.current.tone === 'positive' ? 'Connection updated' : 'The connection could not be made'}
+          className="mb-5"
+          action={
+            <button type="button" onClick={outcome.dismiss} className="text-[12.5px] font-medium text-ink-600 hover:text-ink-900">
+              Dismiss
+            </button>
+          }
+        >
+          {outcome.current.message}
+        </Alert>
+      ) : null}
+
       {!data.credentialEncryptionConfigured ? (
         <Alert tone="warning" title="Integration credentials cannot be stored" className="mb-5">
           <code className="font-mono text-[12px]">CREDENTIAL_ENCRYPTION_KEY</code> is not set or is not exactly 32
@@ -97,7 +116,9 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
           <div>
             <CardTitle>Source systems</CardTitle>
             <CardDescription>
-              Connection status and sync cadence. Credentials and access tokens are never displayed here.
+              {showActions
+                ? 'Connect each source with its own key or sign-in. Credentials are stored encrypted.'
+                : 'Connection status and sync cadence.'}
             </CardDescription>
           </div>
         </CardHeader>
@@ -111,6 +132,7 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
                 <TH>Last attempt</TH>
                 <TH>Cadence</TH>
                 <TH>History</TH>
+                {showActions ? <TH className="text-right">Actions</TH> : null}
               </TR>
             </THead>
             <TBody>
@@ -158,9 +180,21 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
                           {row.lastErrorMessage}
                         </span>
                       ) : null}
+                      {row.connectionDetail ? (
+                        <span className="mt-1 block text-[11.5px] text-ink-600">{row.connectionDetail}</span>
+                      ) : null}
                       {!row.configuredNow && row.status === 'NOT_CONFIGURED' ? (
                         <span className="mt-1 block text-[11.5px] text-ink-500">
-                          Credentials are not present in this deployment&apos;s environment.
+                          {showActions
+                            ? row.connectMethod === 'oauth'
+                              ? 'Not connected yet. Use Connect to sign in with Intuit.'
+                              : 'Not connected yet. Use Connect to add the credentials.'
+                            : 'No credentials are stored or present in this deployment\u2019s environment.'}
+                        </span>
+                      ) : null}
+                      {row.configuredNow && row.credentialSource === 'environment' && row.status === 'NOT_CONFIGURED' ? (
+                        <span className="mt-1 block text-[11.5px] text-ink-500">
+                          Credentials come from the server environment. Test the connection or run a sync to activate it.
                         </span>
                       ) : null}
                     </TD>
@@ -177,6 +211,17 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
                     </TD>
                     <TD className="whitespace-nowrap text-ink-700">Every {row.syncIntervalMin} min</TD>
                     <TD className="whitespace-nowrap text-ink-700">{row.historyMonths} months</TD>
+                    {showActions ? (
+                      <TD className="whitespace-nowrap">
+                        <div className="flex justify-end">
+                          <ConnectSourceActions
+                            row={row}
+                            encryptionReady={data.credentialEncryptionConfigured}
+                            onOutcome={outcome.set}
+                          />
+                        </div>
+                      </TD>
+                    ) : null}
                   </TR>
                 )
               })}
@@ -428,4 +473,40 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
       </p>
     </>
   )
+}
+
+/**
+ * The banner shown after a connect / disconnect action.
+ *
+ * A result can arrive two ways: from an in-page dialog (Method, Shopify,
+ * disconnect) or from the QuickBooks OAuth callback, which lands back here
+ * with `?connected=quickbooks&message=…`. The query string is read once and
+ * removed from the URL so a refresh does not repeat the message.
+ */
+function useConnectionOutcome() {
+  const params = useSearchParams()
+  const router = useRouter()
+  const [current, setCurrent] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(null)
+
+  const fromUrl = params.get('message')
+  const connected = params.get('connected')
+
+  React.useEffect(() => {
+    if (!fromUrl) return
+    setCurrent({ tone: connected ? 'positive' : 'negative', message: fromUrl })
+    const rest = new URLSearchParams(params)
+    rest.delete('message')
+    rest.delete('connected')
+    const qs = rest.toString()
+    router.replace(`/data-health${qs ? `?${qs}` : ''}`)
+    router.refresh()
+    // Only when the URL message changes; `params`/`router` are stable enough for this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromUrl, connected])
+
+  return {
+    current,
+    set: setCurrent,
+    dismiss: () => setCurrent(null),
+  }
 }

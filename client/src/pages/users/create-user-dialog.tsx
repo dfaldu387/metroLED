@@ -94,7 +94,7 @@ export function CreateUserDialog({
                 {result.secret ? (
                   <p className="mt-2">
                     One-time password:{' '}
-                    <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
+                    <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
                       {result.secret}
                     </code>
                     <br />

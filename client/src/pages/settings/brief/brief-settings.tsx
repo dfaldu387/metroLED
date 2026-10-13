@@ -164,7 +164,7 @@ export function BriefSettings({
                 Saving a time here records your intent. The brief is actually sent when a scheduler calls this
                 endpoint at that time:
               </p>
-              <p className="mt-2 break-all rounded bg-white px-2.5 py-2 font-mono text-[11.5px] text-ink-900">
+              <p className="mt-2 break-all rounded bg-surface px-2.5 py-2 font-mono text-[11.5px] text-ink-900">
                 POST {appUrl}/api/cron/brief
                 <br />
                 Authorization: Bearer $CRON_SECRET

@@ -141,7 +141,25 @@ export interface DataHealthSourceRow {
   hasStoredCredentials: boolean
   isStale: boolean
   minutesSinceSuccess: number | null
+  /** Whether a usable credential exists right now (stored, or for key-based sources, in the environment). */
   configuredNow: boolean
+  /**
+   * How the credential is held: stored encrypted in the database, read from
+   * the deployment environment, or absent. Decides which actions make sense.
+   */
+  credentialSource: 'stored' | 'environment' | 'none'
+  /** Non-secret description of what is connected (shop domain, QuickBooks realm). */
+  connectionDetail: string | null
+  /** Where the "Connect" action goes: OAuth redirect, an in-page form, or nothing. */
+  connectMethod: 'oauth' | 'form' | 'none'
+  /** For OAuth providers: whether the app's own client id/secret are set, without which the flow cannot start. */
+  oauthAppConfigured: boolean
+  /** Where those app keys come from. */
+  oauthAppSource: 'stored' | 'environment' | 'none'
+  /** Intuit environment the keys belong to (QuickBooks only). */
+  oauthEnvironment: 'sandbox' | 'production' | null
+  /** The redirect URI that must be registered with the provider (QuickBooks only). */
+  oauthRedirectUri: string | null
 }
 
 export interface DataHealthSyncRun {
@@ -194,6 +212,8 @@ export interface DataHealthPageData {
   dbReady: boolean
   usingDemo: boolean
   canManage: boolean
+  /** May connect or disconnect a source (settings.manage). */
+  canConnect: boolean
   credentialEncryptionConfigured: boolean
   rows: DataHealthSourceRow[]
   lastRefreshAt: string | null
@@ -244,4 +264,63 @@ export interface ChangePasswordBody {
   currentPassword: string
   newPassword: string
   confirmPassword: string
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/integrations/{method,shopify}/connect and /:provider/disconnect
+// ---------------------------------------------------------------------------
+
+export interface ConnectMethodRequest {
+  apiKey: string
+}
+
+export interface ConnectShopifyRequest {
+  shopDomain: string
+  accessToken: string
+  webhookSecret?: string
+}
+
+/** The reply never includes the credential; only whether it worked and why. */
+export interface IntegrationActionResult {
+  ok: boolean
+  provider?: string
+  message: string
+  error?: string
+  /** Returned after saving the Intuit app keys: where to send the browser to start the sign-in. */
+  connectUrl?: string
+  redirectUri?: string
+}
+
+export interface QuickBooksAppRequest {
+  clientId: string
+  clientSecret: string
+  environment: 'sandbox' | 'production'
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/notifications
+// ---------------------------------------------------------------------------
+
+export type NotificationSeverity = 'urgent' | 'warning' | 'info'
+
+/**
+ * A condition that is true right now for the signed-in user. Derived on each
+ * request from permission-scoped data; never a stored row.
+ */
+export interface NotificationItem {
+  id: string
+  severity: NotificationSeverity
+  title: string
+  detail: string
+  amountLabel: string | null
+  actionLabel: string
+  href: string
+  /** When the item came into being, if known (e.g. a brief's generation time). */
+  at: string | null
+}
+
+export interface NotificationsResponse {
+  now: string
+  mode: DataMode
+  items: NotificationItem[]
 }

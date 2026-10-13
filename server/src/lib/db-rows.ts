@@ -124,6 +124,8 @@ export interface IntegrationRow {
   isEnabled: boolean
   config: unknown | null
   credentials: unknown | null
+  /** Sealed Intuit app keys (QuickBooks only); see integrations/quickbooks-app.ts. */
+  appCredentials: unknown | null
   tokenExpiresAt: Date | null
   lastSuccessAt: Date | null
   lastAttemptAt: Date | null

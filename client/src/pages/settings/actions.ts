@@ -73,5 +73,14 @@ export function useSettingsActions() {
         body: formBody(formData),
         alsoInvalidate: [['page', 'gross-margin']],
       }),
+    approveCostPeriod: (formData: FormData) =>
+      run({
+        method: 'post',
+        path: `/api/settings/cost-periods/${seg(formData, 'periodId')}/approval`,
+        body: formBody(formData),
+        alsoInvalidate: [['page']],
+      }),
+    approveAllCostPeriods: () =>
+      run({ method: 'post', path: '/api/settings/cost-periods/approve-all', alsoInvalidate: [['page']] }),
   }
 }

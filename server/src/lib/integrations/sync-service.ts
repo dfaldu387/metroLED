@@ -1,7 +1,7 @@
 import type { IntegrationProvider, SyncTrigger } from '@shared/enums'
-import { db, insert, insertMany, sql, transaction, upsert, type Queryable } from '../db'
-import type { IntegrationRow, SyncCheckpointRow } from '../db-rows'
-import { addMonths, startOfDayInZone } from '@shared/dates'
+import { db, insert, insertMany, json, sql, transaction, upsert, type Queryable } from '../db'
+import type { DivisionCostRow, IntegrationRow, SyncCheckpointRow } from '../db-rows'
+import { addMonths, startOfDayInZone, toIsoDate } from '@shared/dates'
 import { integrationEnv } from '../env'
 import { describeError, ProviderAuthError, ProviderHttpError, type RequestCounter } from './http'
 import { ecoLedMartDivisionId, loadDivisionRules, resolveDivision, type DivisionRule } from './division-mapping'
@@ -426,6 +426,7 @@ async function fetchPage(adapter: ProviderAdapter, entity: SyncEntity, context: 
     case 'orders':
       return adapter.fetchOrders ? adapter.fetchOrders(context) : null
     case 'accounts':
+      return adapter.fetchAccounts ? adapter.fetchAccounts(context) : null
     case 'cogs':
       return adapter.fetchCogs ? adapter.fetchCogs(context) : null
     default:
@@ -467,9 +468,89 @@ async function persist(
       return persistQuote(integrationId, item as never, options.divisionRules)
     case 'orders':
       return persistOrder(integrationId, item as never)
+    case 'cogs':
+      return persistCostPeriod(item as never, options.divisionRules)
     default:
       return 'skipped'
   }
+}
+
+/**
+ * One month of direct cost, attributed to divisions with the same mapping
+ * rules as invoices. Every active division gets a row for the month, so an
+ * approved month with no cost still counts as covered rather than missing.
+ *
+ * A changed figure withdraws an existing approval: Finance approved the old
+ * number, not the new one.
+ */
+async function persistCostPeriod(
+  period: import('./types').NormalizedCostPeriod,
+  rules: DivisionRule[],
+): Promise<PersistOutcome> {
+  const totals = new Map<string, { amount: number; sources: unknown[] }>()
+  const unassigned: string[] = []
+  for (const group of period.groups) {
+    const divisionId = resolveDivision(rules, group.mappingFields)
+    if (!divisionId) {
+      if (group.amount !== 0) unassigned.push(`${group.label} (${group.amount.toFixed(2)})`)
+      continue
+    }
+    const total = totals.get(divisionId) ?? { amount: 0, sources: [] }
+    total.amount = Math.round((total.amount + group.amount) * 100) / 100
+    total.sources.push({ group: group.label, amount: group.amount, accounts: group.accounts })
+    totals.set(divisionId, total)
+  }
+  if (unassigned.length > 0) {
+    console.warn(
+      `[sync:cogs] ${toIsoDate(period.periodStart)}: direct cost matched no division and was left out: ${unassigned.join(', ')}. Add a division mapping rule for it.`,
+    )
+  }
+
+  const divisions = await db.many<{ id: string }>(sql`SELECT "id" FROM "Division" WHERE "isActive" = true`)
+  const periodStart = toIsoDate(period.periodStart)
+  const periodEnd = toIsoDate(period.periodEnd)
+  let outcome: PersistOutcome = 'skipped'
+
+  for (const division of divisions) {
+    const total = totals.get(division.id) ?? { amount: 0, sources: [] }
+    const existing = await db.maybeOne<DivisionCostRow>(sql`
+      SELECT * FROM "DivisionCost" WHERE "divisionId" = ${division.id} AND "periodStart" = ${periodStart}`)
+
+    if (!existing) {
+      await insert('DivisionCost', {
+        divisionId: division.id,
+        periodStart,
+        periodEnd,
+        cogsAmount: total.amount,
+        currency: period.currency,
+        sourceAccounts: json(total.sources),
+        basis: period.basis,
+        isApproved: false,
+      })
+      outcome = 'created'
+      continue
+    }
+
+    if (Math.abs(Number(existing.cogsAmount) - total.amount) <= 0.005) continue
+
+    const note = existing.isApproved
+      ? `Figure changed from ${Number(existing.cogsAmount).toFixed(2)} to ${total.amount.toFixed(2)} on sync; the approval was withdrawn.`
+      : null
+    await db.exec(sql`
+      UPDATE "DivisionCost" SET
+        "cogsAmount" = ${total.amount},
+        "currency" = ${period.currency},
+        "sourceAccounts" = ${json(total.sources)},
+        "basis" = ${period.basis},
+        "isApproved" = false,
+        "approvedBy" = NULL,
+        "approvedAt" = NULL,
+        "note" = ${note},
+        "updatedAt" = ${new Date()}
+      WHERE "id" = ${existing.id}`)
+    outcome = 'updated'
+  }
+  return outcome
 }
 
 async function persistCustomer(

@@ -33,6 +33,8 @@ export const AUDIT_ACTIONS = {
   METRIC_DEFINITION_UPDATED: 'metric.definition_updated',
   METRIC_APPROVED: 'metric.approved',
   METRIC_REJECTED: 'metric.rejected',
+  COST_PERIOD_APPROVED: 'cost_period.approved',
+  COST_PERIOD_APPROVAL_WITHDRAWN: 'cost_period.approval_withdrawn',
   RECONCILIATION_RECORDED: 'metric.reconciliation_recorded',
 
   INTEGRATION_CONNECTED: 'integration.connected',

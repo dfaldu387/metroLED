@@ -19,7 +19,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: 'border-ink-200 bg-ink-100 text-ink-700',
-        outline: 'border-ink-300 bg-white text-ink-700',
+        outline: 'border-ink-300 bg-surface text-ink-700',
         brand: 'border-brand-200 bg-brand-50 text-brand-700',
         positive: 'border-positive-200 bg-positive-50 text-positive-800',
         negative: 'border-negative-200 bg-negative-50 text-negative-800',

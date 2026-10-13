@@ -27,7 +27,7 @@ export const TooltipContent = React.forwardRef<
         sideOffset={sideOffset}
         collisionPadding={12}
         className={cn(
-          'z-50 max-w-xs whitespace-pre-line rounded-lg bg-ink-900 px-3 py-2 text-[12.5px] leading-5 text-white shadow-overlay',
+          'z-50 max-w-xs whitespace-pre-line rounded-lg bg-ink-900 px-3 py-2 text-[12.5px] leading-5 text-ink-50 shadow-overlay',
           'data-[state=delayed-open]:animate-in data-[state=closed]:animate-out',
           className,
         )}

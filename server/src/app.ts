@@ -16,6 +16,7 @@ import { briefRouter } from './routes/brief'
 import { syncRouter } from './routes/sync'
 import { cronRouter } from './routes/cron'
 import { integrationsRouter } from './routes/integrations'
+import { notificationsRouter } from './routes/notifications'
 import { webhooksRouter } from './routes/webhooks'
 
 /**
@@ -68,6 +69,7 @@ export function createApp(): express.Express {
   app.use('/api/sync', syncRouter)
   app.use('/api/cron', cronRouter)
   app.use('/api/integrations', integrationsRouter)
+  app.use('/api/notifications', notificationsRouter)
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'NOT_FOUND', message: 'No such API endpoint.' })
