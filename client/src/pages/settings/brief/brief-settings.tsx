@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, EmptyState } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form'
 import { Switch } from '@/components/ui/misc'
@@ -44,7 +45,6 @@ export function BriefSettings({
   isConsoleProvider: boolean
   appUrl: string
 }) {
-  const [result, setResult] = React.useState<SettingsResult | null>(null)
   const { addBriefRecipient, removeBriefRecipient, updateBriefSchedule } = useSettingsActions()
   const [busy, setBusy] = React.useState(false)
   const [enabled, setEnabled] = React.useState(settings.briefEnabled)
@@ -54,11 +54,10 @@ export function BriefSettings({
 
   const run = async (action: (formData: FormData) => Promise<SettingsResult>, formData: FormData) => {
     setBusy(true)
-    setResult(null)
     try {
-      setResult(await action(formData))
+      notifyResult(await action(formData))
     } catch {
-      setResult({ ok: false, message: 'Something went wrong. Please try again.' })
+      notifyResult({ ok: false, message: 'Something went wrong. Please try again.' })
     } finally {
       setBusy(false)
       setConfirmRemove(null)
@@ -76,12 +75,6 @@ export function BriefSettings({
 
   return (
     <div className="space-y-4">
-      {result ? (
-        <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Saved' : 'Not saved'}>
-          {result.message}
-        </Alert>
-      ) : null}
-
       {/* --- Schedule ------------------------------------------------------ */}
       <Card>
         <CardHeader>

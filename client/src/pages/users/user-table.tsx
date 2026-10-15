@@ -6,6 +6,7 @@ import { formatDate } from '@shared/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Checkbox, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/misc'
 import { Label } from '@/components/ui/form'
@@ -48,9 +49,13 @@ export function UserTable({ users, currentUserId }: { users: UserRow[]; currentU
     setBusy(true)
     setResult(null)
     try {
-      setResult(await action(formData))
+      const r = await action(formData)
+      setResult(r)
+      notifyResult(r)
     } catch {
-      setResult({ ok: false, message: 'Something went wrong. Please try again.' })
+      const r: ActionResult = { ok: false, message: 'Something went wrong. Please try again.' }
+      setResult(r)
+      notifyResult(r)
     } finally {
       setBusy(false)
       setConfirmDeactivate(null)
@@ -61,23 +66,21 @@ export function UserTable({ users, currentUserId }: { users: UserRow[]; currentU
 
   return (
     <>
-      {result ? (
+      {result?.secret ? (
         <div className="border-b border-ink-200 p-4 sm:p-5">
-          <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Done' : 'That did not work'}>
+          <Alert tone="positive" title="One-time password">
             <p>{result.message}</p>
-            {result.secret ? (
-              <p className="mt-2">
-                One-time password:{' '}
-                <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
-                  {result.secret}
-                </code>
-                <br />
-                <span className="text-[12px] text-ink-600">
-                  This is shown once and is not stored in readable form. Pass it to the user over a channel you
-                  trust.
-                </span>
-              </p>
-            ) : null}
+            <p className="mt-2">
+              One-time password:{' '}
+              <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
+                {result.secret}
+              </code>
+              <br />
+              <span className="text-[12px] text-ink-600">
+                This is shown once and is not stored in readable form. Pass it to the user over a channel you
+                trust.
+              </span>
+            </p>
           </Alert>
         </div>
       ) : null}

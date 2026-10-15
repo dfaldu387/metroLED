@@ -11,6 +11,8 @@ import {
   type ToolExecution,
   type ToolSource,
 } from './tools'
+import { knowledgeConfigured } from './retrieval'
+import { KNOWLEDGE_TOOL_NAME, knowledgeToolDefinition, runKnowledgeTool } from './knowledge-tool'
 
 /**
  * Ask MetroLED - the AI business analyst (section 11).
@@ -46,7 +48,12 @@ export interface AssistantAnswer {
   error?: string
 }
 
-function systemPrompt(user: SessionUser, scope: AccessScope, dataset: LoadedDataset): string {
+function systemPrompt(
+  user: SessionUser,
+  scope: AccessScope,
+  dataset: LoadedDataset,
+  hasKnowledge: boolean,
+): string {
   const restrictions: string[] = []
 
   if (!scope.canSeeMargin) {
@@ -90,7 +97,12 @@ MetroLED has three divisions:
 - Eco LED Mart: a Shopify e-commerce store
 
 HOW YOU WORK
-You have no database access. You answer only by calling the approved business-query tools provided to you. If no tool can answer the question, say so - do not guess, estimate, or calculate a figure from numbers that were not returned by a tool.
+You have no database access. You answer only by calling the approved business-query tools provided to you. If no tool can answer the question, say so - do not guess, estimate, or calculate a figure from numbers that were not returned by a tool.${
+    hasKnowledge
+      ? `
+For questions about how a figure is defined or calculated, what a term means, methodology, or company policy, call the search_knowledge tool to retrieve the relevant passage from MetroLED's own documentation, and base your explanation on what it returns, citing the document and section it came from. Never use search_knowledge to obtain or infer a business figure - every number comes from the data tools.`
+      : ''
+  }
 ${demoWarning}
 
 ANSWER FORMAT
@@ -158,7 +170,10 @@ export async function ask(options: AskOptions): Promise<AssistantAnswer> {
     now,
   }
 
-  const tools = toolDefinitionsFor(options.scope)
+  const hasKnowledge = knowledgeConfigured()
+  const tools = hasKnowledge
+    ? [...toolDefinitionsFor(options.scope), knowledgeToolDefinition()]
+    : toolDefinitionsFor(options.scope)
   const executions: ToolExecution[] = []
 
   const messages: Anthropic.Beta.BetaMessageParam[] = [
@@ -180,7 +195,7 @@ export async function ask(options: AskOptions): Promise<AssistantAnswer> {
       const response = await anthropic.beta.messages.create({
         model,
         max_tokens: 4096,
-        system: systemPrompt(options.user, options.scope, options.dataset),
+        system: systemPrompt(options.user, options.scope, options.dataset, hasKnowledge),
         tools,
         messages,
         // Keep the reasoning depth proportionate: these are bounded lookups
@@ -227,7 +242,10 @@ export async function ask(options: AskOptions): Promise<AssistantAnswer> {
 
       const toolResults: Anthropic.Beta.BetaToolResultBlockParam[] = []
       for (const toolUse of toolUses) {
-        const execution = executeTool(toolUse.name, toolUse.input, toolContext)
+        const execution =
+          toolUse.name === KNOWLEDGE_TOOL_NAME
+            ? await runKnowledgeTool(toolUse.input)
+            : executeTool(toolUse.name, toolUse.input, toolContext)
         executions.push(execution)
 
         toolResults.push({

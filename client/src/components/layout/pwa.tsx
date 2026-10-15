@@ -33,12 +33,10 @@ export function PwaProvider() {
       return
     }
 
-    {
-      navigator.serviceWorker.register('/sw.js').catch((error) => {
-        // A failed registration must not break the application.
-        console.warn('[pwa] service worker registration failed', error)
-      })
-    }
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // A failed registration must not break the application; it only means the
+      // offline/installable features are unavailable, which is not worth a warning.
+    })
   }, [])
 
   React.useEffect(() => {

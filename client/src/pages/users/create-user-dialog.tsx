@@ -4,6 +4,7 @@ import { UserPlus } from 'lucide-react'
 import { ROLE_LABELS } from '@shared/permissions'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import {
   Dialog,
   DialogBody,
@@ -77,32 +78,30 @@ export function CreateUserDialog({
             try {
               const outcome = await createUser(formData)
               setResult(outcome)
+              notifyResult(outcome)
             } catch {
-              setResult({ ok: false, message: 'Something went wrong. Please try again.' })
+              const outcome: ActionResult = { ok: false, message: 'Something went wrong. Please try again.' }
+              setResult(outcome)
+              notifyResult(outcome)
             } finally {
               setBusy(false)
             }
           }}
         >
           <DialogBody className="space-y-4">
-            {result ? (
-              <Alert
-                tone={result.ok ? 'positive' : 'negative'}
-                title={result.ok ? 'Account created' : 'Could not create the account'}
-              >
+            {result?.secret ? (
+              <Alert tone="positive" title="Account created">
                 <p>{result.message}</p>
-                {result.secret ? (
-                  <p className="mt-2">
-                    One-time password:{' '}
-                    <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
-                      {result.secret}
-                    </code>
-                    <br />
-                    <span className="text-[12px] text-ink-600">
-                      Shown once only. Pass it on over a channel you trust.
-                    </span>
-                  </p>
-                ) : null}
+                <p className="mt-2">
+                  One-time password:{' '}
+                  <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[12.5px] font-semibold text-ink-900">
+                    {result.secret}
+                  </code>
+                  <br />
+                  <span className="text-[12px] text-ink-600">
+                    Shown once only. Pass it on over a channel you trust.
+                  </span>
+                </p>
               </Alert>
             ) : null}
 
