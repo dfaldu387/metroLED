@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, EmptyState } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form'
 import { TBody, TD, TH, THead, TR, Table, TableScroll } from '@/components/ui/table'
@@ -52,7 +53,6 @@ export function DivisionSettings({
   unassigned: { invoices: number; quotes: number }
   canManage: boolean
 }) {
-  const [result, setResult] = React.useState<SettingsResult | null>(null)
   const { createDivision, createMappingRule, deleteMappingRule } = useSettingsActions()
   const [busy, setBusy] = React.useState(false)
   const [confirmDelete, setConfirmDelete] = React.useState<RuleRow | null>(null)
@@ -71,11 +71,10 @@ export function DivisionSettings({
 
   const run = async (action: (formData: FormData) => Promise<SettingsResult>, formData: FormData) => {
     setBusy(true)
-    setResult(null)
     try {
-      setResult(await action(formData))
+      notifyResult(await action(formData))
     } catch {
-      setResult({ ok: false, message: 'Something went wrong. Please try again.' })
+      notifyResult({ ok: false, message: 'Something went wrong. Please try again.' })
     } finally {
       setBusy(false)
       setConfirmDelete(null)
@@ -84,12 +83,6 @@ export function DivisionSettings({
 
   return (
     <div className="space-y-4">
-      {result ? (
-        <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Saved' : 'Not saved'}>
-          {result.message}
-        </Alert>
-      ) : null}
-
       {unassigned.invoices > 0 || unassigned.quotes > 0 ? (
         <Alert tone="warning" title="Some records are not assigned to a division">
           {unassigned.invoices > 0 ? `${unassigned.invoices} invoices` : ''}

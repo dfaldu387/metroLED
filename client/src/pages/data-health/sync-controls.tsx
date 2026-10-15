@@ -2,7 +2,7 @@ import * as React from 'react'
 import { PlugZap, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
-import { Alert } from '@/components/ui/feedback'
+import { notify } from '@/lib/toast'
 import { api, ApiError } from '@/lib/api'
 import { useRouter } from '@/lib/navigation'
 import {
@@ -32,24 +32,18 @@ export function SyncControls({ providers }: { providers: ProviderOption[] }) {
   const router = useRouter()
   const [busy, setBusy] = React.useState<string | null>(null)
   const [confirmBackfill, setConfirmBackfill] = React.useState<ProviderOption | 'all' | null>(null)
-  const [result, setResult] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(null)
 
   const call = async (body: Record<string, unknown>, label: string) => {
     setBusy(label)
-    setResult(null)
     try {
       const payload = await postJson<{ ok?: boolean; message?: string }>('/api/sync/run', body)
 
-      setResult({
-        tone: payload.ok ? 'positive' : 'negative',
-        message: payload.message ?? (payload.ok ? 'Done.' : 'The request failed.'),
-      })
+      const message = payload.message ?? (payload.ok ? 'Done.' : 'The request failed.')
+      if (payload.ok) notify.success('Finished', message)
+      else notify.error('That did not work', message)
       router.refresh()
     } catch {
-      setResult({
-        tone: 'negative',
-        message: 'Could not reach the server. Check your connection and try again.',
-      })
+      notify.error('That did not work', 'Could not reach the server. Check your connection and try again.')
     } finally {
       setBusy(null)
       setConfirmBackfill(null)
@@ -129,16 +123,6 @@ export function SyncControls({ providers }: { providers: ProviderOption[] }) {
           Run sync now
         </Button>
       </div>
-
-      {result ? (
-        <Alert
-          tone={result.tone}
-          title={result.tone === 'positive' ? 'Finished' : 'That did not work'}
-          className="mt-3 w-full max-w-xl"
-        >
-          {result.message}
-        </Alert>
-      ) : null}
 
       <ConfirmDialog
         open={confirmBackfill !== null}

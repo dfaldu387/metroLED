@@ -2,11 +2,12 @@ import * as React from 'react'
 import { ExternalLink, KeyRound, ShieldCheck } from 'lucide-react'
 import { formatRelativeTime } from '@shared/dates'
 import type { IntegrationsSettingsPageData } from '@shared/api/admin'
-import { Link, useDocumentTitle, useSearchParams } from '@/lib/navigation'
+import { Link, useDocumentTitle, usePathname, useRouter, useSearchParams } from '@/lib/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge, StatusDot } from '@/components/ui/badge'
 import { Alert } from '@/components/ui/feedback'
+import { notify } from '@/lib/toast'
 import { PageQuery } from '@/components/layout/page-error'
 import { FormPageSkeleton } from '@/components/layout/page-skeleton'
 import { ADMIN_KEYS, useAdminPage } from '@/pages/users/admin-client'
@@ -39,27 +40,32 @@ export default function IntegrationsSettingsPage() {
 function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
   const now = new Date()
   const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const oauthMessage = params.get('message')
   const oauthOk = Boolean(params.get('connected'))
-  const [outcome, setOutcome] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(
-    oauthMessage ? { tone: oauthOk ? 'positive' : 'negative', message: oauthMessage } : null,
-  )
+
+  const onOutcome = React.useCallback((o: { tone: 'positive' | 'negative'; message: string }) => {
+    if (o.tone === 'positive') notify.success('Connection updated', o.message)
+    else notify.error('The connection could not be made', o.message)
+  }, [])
+
+  // The QuickBooks OAuth callback returns here with ?connected=&message=. Show
+  // it once as a toast, then strip the params so a refresh does not repeat it.
+  React.useEffect(() => {
+    if (!oauthMessage) return
+    if (oauthOk) notify.success('Connection updated', oauthMessage)
+    else notify.error('The connection could not be made', oauthMessage)
+    const rest = new URLSearchParams(params)
+    rest.delete('message')
+    rest.delete('connected')
+    const qs = rest.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oauthMessage, oauthOk])
 
   return (
     <div className="space-y-4">
-      {outcome ? (
-        <Alert
-          tone={outcome.tone}
-          title={outcome.tone === 'positive' ? 'Connection updated' : 'The connection could not be made'}
-          action={
-            <button type="button" onClick={() => setOutcome(null)} className="text-[12.5px] font-medium text-ink-600 hover:text-ink-900">
-              Dismiss
-            </button>
-          }
-        >
-          {outcome.message}
-        </Alert>
-      ) : null}
       {!data.encryptionConfigured ? (
         <Alert tone="negative" title="Credentials cannot be stored on this deployment">
           <code className="font-mono text-[12px]">CREDENTIAL_ENCRYPTION_KEY</code> is missing or is not exactly 32
@@ -206,7 +212,7 @@ function IntegrationsView({ data }: { data: IntegrationsSettingsPageData }) {
                 <ConnectSourceActions
                   row={source}
                   encryptionReady={data.encryptionConfigured}
-                  onOutcome={setOutcome}
+                  onOutcome={onOutcome}
                   returnTo="settings"
                 />
               ) : null}

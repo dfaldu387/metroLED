@@ -2,7 +2,7 @@ import type { IntegrationProvider, SyncTrigger } from '@shared/enums'
 import { db, insert, insertMany, json, sql, transaction, upsert, type Queryable } from '../db'
 import type { DivisionCostRow, IntegrationRow, SyncCheckpointRow } from '../db-rows'
 import { addMonths, startOfDayInZone, toIsoDate } from '@shared/dates'
-import { integrationEnv } from '../env'
+import { integrationEnv, isProduction } from '../env'
 import { describeError, ProviderAuthError, ProviderHttpError, type RequestCounter } from './http'
 import { ecoLedMartDivisionId, loadDivisionRules, resolveDivision, type DivisionRule } from './division-mapping'
 import { linkedCustomerId, resolveCustomer, resolveSalesRep } from './matching'
@@ -122,6 +122,35 @@ export async function syncProvider(
   }
 
   await db.exec(sql`UPDATE "Integration" SET "lastAttemptAt" = ${new Date()} WHERE "id" = ${integration.id}`)
+
+  // Auto-reconnect: if this source is currently in an error state, re-test its
+  // credentials before syncing. A transient failure — the provider was down or
+  // rate-limited, or (QuickBooks) an access token that can be refreshed — clears
+  // itself, so we flip the source back to CONNECTED and carry on. A hard
+  // credential failure (an expired QuickBooks login, or a Shopify/Method key the
+  // provider now rejects with 401) cannot self-heal, so we leave it in ERROR with
+  // a clear "reconnect" message and skip the run rather than burn the rate limit
+  // on calls that are certain to fail.
+  if (integration.status === 'ERROR') {
+    const recheck = await testProviderConnection(provider)
+    if (recheck.ok) {
+      await db.exec(sql`
+        UPDATE "Integration" SET
+          "status" = ${'CONNECTED'},
+          "lastErrorMessage" = NULL,
+          "consecutiveFailures" = 0
+        WHERE "id" = ${integration.id}`)
+      integration.status = 'CONNECTED'
+    } else {
+      await db.exec(sql`
+        UPDATE "Integration" SET
+          "lastErrorAt" = ${new Date()},
+          "lastErrorMessage" = ${recheck.detail},
+          "consecutiveFailures" = "consecutiveFailures" + 1
+        WHERE "id" = ${integration.id}`)
+      return failure(provider, integration.displayName, recheck.detail, started)
+    }
+  }
 
   const counter: RequestCounter = { count: 0 }
   const entityResults: EntityResult[] = []
@@ -346,7 +375,11 @@ async function syncEntity(
       cursor,
       counter: options.counter,
       signal: options.signal,
-      log: (message) => console.info(`[sync:${adapter.provider}:${entity}] ${message}`),
+      // Per-page progress is verbose; keep it out of production logs. The
+      // authoritative record of every run lives in the SyncRun table.
+      log: (message) => {
+        if (!isProduction()) console.info(`[sync:${adapter.provider}:${entity}] ${message}`)
+      },
       onRetry: ({ attempt, delayMs, reason }) =>
         console.warn(
           `[sync:${adapter.provider}:${entity}] attempt ${attempt} failed (${reason}); retrying in ${delayMs}ms`,

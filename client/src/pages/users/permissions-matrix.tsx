@@ -5,7 +5,7 @@ import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS } from '@shared/permissions'
 import type { RoleName } from '@shared/enums'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Alert } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { Checkbox } from '@/components/ui/misc'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TBody, TD, TH, THead, TR, Table, TableScroll } from '@/components/ui/table'
@@ -49,7 +49,6 @@ export function PermissionsMatrix({
   )
   const { updateRolePermissions, resetRolePermissionsToDefault } = useUserActions()
   const [busy, setBusy] = React.useState<string | null>(null)
-  const [result, setResult] = React.useState<ActionResult | null>(null)
 
   const initial = React.useRef(
     Object.fromEntries(roles.map((role) => [role.name, new Set(role.granted)])),
@@ -74,19 +73,18 @@ export function PermissionsMatrix({
 
   const save = async (roleName: string) => {
     setBusy(roleName)
-    setResult(null)
     const formData = new FormData()
     formData.set('roleName', roleName)
     for (const permission of state[roleName] ?? []) formData.append('permissions', permission)
 
     try {
       const outcome = await updateRolePermissions(formData)
-      setResult(outcome)
+      notifyResult(outcome)
       if (outcome.ok) {
         initial.current = { ...initial.current, [roleName]: new Set(state[roleName] ?? []) }
       }
     } catch {
-      setResult({ ok: false, message: 'Something went wrong saving those permissions.' })
+      notifyResult({ ok: false, message: 'Something went wrong saving those permissions.' })
     } finally {
       setBusy(null)
     }
@@ -94,12 +92,11 @@ export function PermissionsMatrix({
 
   const resetToDefault = async (roleName: string) => {
     setBusy(roleName)
-    setResult(null)
     const formData = new FormData()
     formData.set('roleName', roleName)
     try {
       const outcome = await resetRolePermissionsToDefault(formData)
-      setResult(outcome)
+      notifyResult(outcome)
       // The server now holds exactly the proposed defaults for this role (the
       // page data is re-fetched too); show them without a full page reload.
       if (outcome.ok) {
@@ -108,7 +105,7 @@ export function PermissionsMatrix({
         initial.current = { ...initial.current, [roleName]: new Set(defaults) }
       }
     } catch {
-      setResult({ ok: false, message: 'Something went wrong resetting that role.' })
+      notifyResult({ ok: false, message: 'Something went wrong resetting that role.' })
     } finally {
       setBusy(null)
     }
@@ -142,14 +139,6 @@ export function PermissionsMatrix({
           </div>
         ) : null}
       </CardHeader>
-
-      {result ? (
-        <div className="border-b border-ink-200 p-4 sm:p-5">
-          <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Saved' : 'Not saved'}>
-            {result.message}
-          </Alert>
-        </div>
-      ) : null}
 
       <TableScroll>
         <Table>

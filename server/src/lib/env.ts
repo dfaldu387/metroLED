@@ -18,7 +18,7 @@ const booleanish = z
 const schema = z.object({
   APP_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
   /** Public base URL users open (the React client). Used in emails and OAuth redirect URIs. */
-  APP_URL: z.string().url().default('http://localhost:5173'),
+  APP_URL: z.string().url().default('http://localhost:3000'),
   /** Port the Express API listens on. */
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
 
@@ -48,6 +48,11 @@ const schema = z.object({
 
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
+
+  // Voyage AI embeddings, used only for the Ask MetroLED knowledge base (RAG).
+  // Anthropic has no embeddings endpoint, so retrieval is embedded with Voyage.
+  VOYAGE_API_KEY: z.string().optional(),
+  VOYAGE_MODEL: z.string().default('voyage-3.5'),
 
   EMAIL_PROVIDER: z.enum(['resend', 'ses', 'console']).default('console'),
   EMAIL_FROM: z.string().default('MetroLED Intelligence <intelligence@metroled.example>'),

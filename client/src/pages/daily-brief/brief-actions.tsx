@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
-import { Alert } from '@/components/ui/feedback'
+import { notify } from '@/lib/toast'
 import { api, ApiError } from '@/lib/api'
 import { useRouter } from '@/lib/navigation'
 
@@ -17,11 +17,9 @@ export function BriefActions({ briefDate }: { briefDate: string }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
-  const [result, setResult] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(null)
 
   const send = async () => {
     setBusy(true)
-    setResult(null)
     try {
       const payload = await postJson<{
         ok?: boolean
@@ -33,7 +31,7 @@ export function BriefActions({ briefDate }: { briefDate: string }) {
       }>('/api/brief/send', { briefDate })
 
       if (!payload.ok) {
-        setResult({ tone: 'negative', message: payload.message ?? 'The brief could not be sent.' })
+        notify.error('Daily brief could not be sent', payload.message ?? 'The brief could not be sent.')
         return
       }
 
@@ -42,16 +40,12 @@ export function BriefActions({ briefDate }: { briefDate: string }) {
       if (payload.skipped) parts.push(`${payload.skipped} already delivered and skipped`)
       if (payload.failed) parts.push(`${payload.failed} failed`)
 
-      setResult({
-        tone: payload.failed && payload.failed > 0 ? 'negative' : 'positive',
-        message: `${parts.join(', ') || 'Nothing to send'}.${payload.simulated ? ' Emails were written to the server log because EMAIL_PROVIDER is set to "console".' : ''}`,
-      })
+      const message = `${parts.join(', ') || 'Nothing to send'}.${payload.simulated ? ' Emails were written to the server log because EMAIL_PROVIDER is set to "console".' : ''}`
+      if (payload.failed && payload.failed > 0) notify.error('Daily brief could not be sent', message)
+      else notify.success('Daily brief sent', message)
       router.refresh()
     } catch {
-      setResult({
-        tone: 'negative',
-        message: 'Could not reach the server. Check your connection and try again.',
-      })
+      notify.error('Daily brief could not be sent', 'Could not reach the server. Check your connection and try again.')
     } finally {
       setBusy(false)
       setConfirmOpen(false)
@@ -66,16 +60,6 @@ export function BriefActions({ briefDate }: { briefDate: string }) {
           Send brief now
         </Button>
       </div>
-
-      {result ? (
-        <Alert
-          tone={result.tone}
-          title={result.tone === 'positive' ? 'Daily brief sent' : 'Daily brief could not be sent'}
-          className="mt-3 w-full"
-        >
-          {result.message}
-        </Alert>
-      ) : null}
 
       <ConfirmDialog
         open={confirmOpen}

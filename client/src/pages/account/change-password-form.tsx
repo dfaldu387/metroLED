@@ -9,6 +9,7 @@ import { SESSION_KEY } from '@/lib/session'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { Field, Input } from '@/components/ui/form'
 
 /**
@@ -19,7 +20,6 @@ import { Field, Input } from '@/components/ui/form'
  */
 export function ChangePasswordForm({ mustChange }: { mustChange: boolean }) {
   const queryClient = useQueryClient()
-  const [result, setResult] = React.useState<ActionResult | null>(null)
   const mutation = useMutation({
     mutationFn: (body: ChangePasswordBody) => api.post<ActionResult>('/api/account/password', body),
   })
@@ -47,14 +47,13 @@ export function ChangePasswordForm({ mustChange }: { mustChange: boolean }) {
           event.preventDefault()
           const form = event.currentTarget
           const formData = new FormData(form)
-          setResult(null)
           try {
             const outcome = await mutation.mutateAsync({
               currentPassword: String(formData.get('currentPassword') ?? ''),
               newPassword: String(formData.get('newPassword') ?? ''),
               confirmPassword: String(formData.get('confirmPassword') ?? ''),
             })
-            setResult(outcome)
+            notifyResult(outcome)
             if (outcome.ok) {
               setNewPassword('')
               setConfirmPassword('')
@@ -63,7 +62,7 @@ export function ChangePasswordForm({ mustChange }: { mustChange: boolean }) {
               void queryClient.invalidateQueries({ queryKey: SESSION_KEY })
             }
           } catch {
-            setResult({ ok: false, message: 'Something went wrong. Please try again.' })
+            notifyResult({ ok: false, message: 'Something went wrong. Please try again.' })
           } finally {
             // A React form action reset the uncontrolled field after every submit; keep that.
             const current = form.elements.namedItem('currentPassword')
@@ -76,12 +75,6 @@ export function ChangePasswordForm({ mustChange }: { mustChange: boolean }) {
             <Alert tone="warning" title="You must change your password">
               This account is using a one-time password issued by an administrator. Choose your own before
               continuing.
-            </Alert>
-          ) : null}
-
-          {result ? (
-            <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Password changed' : 'Not changed'}>
-              {result.message}
             </Alert>
           ) : null}
 

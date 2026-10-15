@@ -10,6 +10,7 @@ import { TablePageSkeleton } from '@/components/layout/page-skeleton'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge, StatusDot } from '@/components/ui/badge'
 import { Alert, EmptyState } from '@/components/ui/feedback'
+import { notify } from '@/lib/toast'
 import { DataModeBanner, MetaFact, PageHeader } from '@/components/layout/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc'
 import { TBody, TD, TH, THead, TR, Table, TableScroll } from '@/components/ui/table'
@@ -74,21 +75,6 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
           <code className="font-mono text-[12px]">DATABASE_URL</code> and run{' '}
           <code className="font-mono text-[12px]">npm run db:deploy</code>.
           {usingDemo ? ' The demo dataset below shows what this page looks like once connected.' : ''}
-        </Alert>
-      ) : null}
-
-      {outcome.current ? (
-        <Alert
-          tone={outcome.current.tone}
-          title={outcome.current.tone === 'positive' ? 'Connection updated' : 'The connection could not be made'}
-          className="mb-5"
-          action={
-            <button type="button" onClick={outcome.dismiss} className="text-[12.5px] font-medium text-ink-600 hover:text-ink-900">
-              Dismiss
-            </button>
-          }
-        >
-          {outcome.current.message}
         </Alert>
       ) : null}
 
@@ -217,7 +203,7 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
                           <ConnectSourceActions
                             row={row}
                             encryptionReady={data.credentialEncryptionConfigured}
-                            onOutcome={outcome.set}
+                            onOutcome={outcome.onOutcome}
                           />
                         </div>
                       </TD>
@@ -486,14 +472,19 @@ function DataHealth({ data }: { data: DataHealthPageData }) {
 function useConnectionOutcome() {
   const params = useSearchParams()
   const router = useRouter()
-  const [current, setCurrent] = React.useState<{ tone: 'positive' | 'negative'; message: string } | null>(null)
 
   const fromUrl = params.get('message')
   const connected = params.get('connected')
 
+  const onOutcome = React.useCallback((o: { tone: 'positive' | 'negative'; message: string }) => {
+    if (o.tone === 'positive') notify.success('Connection updated', o.message)
+    else notify.error('The connection could not be made', o.message)
+  }, [])
+
   React.useEffect(() => {
     if (!fromUrl) return
-    setCurrent({ tone: connected ? 'positive' : 'negative', message: fromUrl })
+    if (connected) notify.success('Connection updated', fromUrl)
+    else notify.error('The connection could not be made', fromUrl)
     const rest = new URLSearchParams(params)
     rest.delete('message')
     rest.delete('connected')
@@ -504,9 +495,5 @@ function useConnectionOutcome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromUrl, connected])
 
-  return {
-    current,
-    set: setCurrent,
-    dismiss: () => setCurrent(null),
-  }
+  return { onOutcome }
 }

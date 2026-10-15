@@ -3,10 +3,10 @@ import * as React from 'react'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert } from '@/components/ui/feedback'
+import { notifyResult } from '@/lib/toast'
 import { Field, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
-import { useSettingsActions, type SettingsResult } from './actions'
+import { useSettingsActions } from './actions'
 
 /**
  * Company settings.
@@ -34,18 +34,16 @@ export function CompanyForm({
 }) {
   const { updateCompanySettings } = useSettingsActions()
   const [busy, setBusy] = React.useState(false)
-  const [result, setResult] = React.useState<SettingsResult | null>(null)
   const [timezone, setTimezone] = React.useState(settings.timezone)
 
   return (
     <form
       action={async (formData) => {
         setBusy(true)
-        setResult(null)
         try {
-          setResult(await updateCompanySettings(formData))
+          notifyResult(await updateCompanySettings(formData))
         } catch {
-          setResult({ ok: false, message: 'Something went wrong saving these settings.' })
+          notifyResult({ ok: false, message: 'Something went wrong saving these settings.' })
         } finally {
           setBusy(false)
         }
@@ -65,12 +63,6 @@ export function CompanyForm({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {result ? (
-            <Alert tone={result.ok ? 'positive' : 'negative'} title={result.ok ? 'Saved' : 'Not saved'}>
-              {result.message}
-            </Alert>
-          ) : null}
-
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Company name" htmlFor="displayName" help="Shown in the application and in email.">
               <Input
